@@ -1,0 +1,2045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Lonaco Editor</title>
+  <!-- Monaco Editor loader -->
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs/loader.js"></script>
+  <style>
+    /* Global box-sizing for consistent layout */
+    * {
+      box-sizing: border-box;
+    }
+
+    /* Body and HTML root styling for full-page editor */
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden; /* Prevent body scrollbars */
+      background: #050505; /* Solid black background */
+      font-family: 'Inter', -apple-system, 'Segoe UI', 'Roboto', system-ui, sans-serif; /* Modern font stack */
+    }
+
+    /* Tab bar styling */
+    #tab-bar {
+      display: flex;
+      background: #111111; /* Very dark gray for tab bar */
+      height: 42px;
+      align-items: center;
+      padding: 0 8px;
+      border-bottom: 1px solid #222222; /* Darker border */
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); /* Pronounced shadow */
+      backdrop-filter: blur(8px); /* Frosted glass effect */
+      position: relative;
+      overflow-x: auto; /* Enable horizontal scrolling for many tabs */
+      overflow-y: hidden;
+    }
+
+    /* Decorative line at the top of the tab bar */
+    #tab-bar::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        #333333 50%,
+        transparent 100%
+      ); /* Subtle gradient for the top line */
+    }
+
+    /* Individual tab styling */
+    .tab {
+      padding: 0 16px;
+      height: 32px;
+      line-height: 32px;
+      color: #bbbbbb; /* Light gray text color */
+      cursor: pointer;
+      border-radius: 8px; /* Rounded corners */
+      font-size: 13px;
+      font-weight: 500;
+      user-select: none; /* Prevent text selection */
+      margin-right: 6px;
+      flex-shrink: 0; /* Prevent shrinking when many tabs */
+      position: relative;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* Smooth transitions */
+      background: #222222; /* Dark gray background */
+      border: 1px solid #333333; /* Solid gray border */
+      backdrop-filter: blur(4px); /* Light frosted effect */
+      min-width: 80px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis; /* Ellipsis for long tab names */
+      display: flex; /* Flexbox for centering content */
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Hover effects for tabs */
+    .tab:hover {
+      color: #ffffff;
+      background: #333333; /* Darker gray on hover */
+      border-color: #555555;
+      transform: translateY(-1px); /* Slight lift effect */
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); /* Stronger dark shadow */
+    }
+
+    /* Active tab styling */
+    .tab.active {
+      color: #ffffff; /* White text for active tab */
+      background: #111111; /* Consistent with tab bar background */
+      border-color: #666666; /* Slightly lighter border for active */
+      box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1); /* Stronger shadow with inner highlight */
+      transform: translateY(-1px);
+    }
+
+    /* Underline for active tab */
+    .tab.active::before {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 2px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        #666666 50%,
+        transparent 100%
+      ); /* Gray gradient underline */
+      border-radius: 1px;
+    }
+
+    /* New tab button styling */
+    .tab.new {
+      padding: 0 12px;
+      font-size: 18px;
+      color: #888888; /* Gray plus sign */
+      font-weight: 600;
+      background: #222222; /* Dark gray background */
+      border-color: #444444;
+      min-width: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Hover effect for new tab button */
+    .tab.new:hover {
+      color: #ffffff;
+      background: #333333;
+      border-color: #666666;
+      transform: translateY(-1px) scale(1.05); /* Slightly larger on hover */
+    }
+
+    /* Styling for editable tab names */
+    .tab[contenteditable="true"] {
+      outline: 2px solid #777777; /* Highlight for editing */
+      background: #222222; /* Darker background when editing */
+      color: #fff;
+      box-shadow:
+        0 0 0 1px #555555,
+        0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Close tab button within a tab */
+    .tab .close-tab {
+        margin-left: 8px;
+        color: #aaaaaa;
+        font-size: 14px;
+        cursor: pointer;
+        transition: color 0.2s ease;
+        line-height: 1; /* Ensures 'x' is vertically centered */
+        display: flex;
+        align-items: center;
+    }
+
+    /* Hover effect for close tab button */
+    .tab .close-tab:hover {
+        color: #ffffff;
+    }
+
+    /* Editor container takes remaining space */
+    #editor-container {
+      position: absolute;
+      top: 42px; /* Below the tab bar */
+      bottom: 0;
+      left: 0;
+      right: 0;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    /* Context menu styling */
+    #context-menu {
+      position: absolute;
+      background: #1a1a1a; /* Dark gray background */
+      color: #fff;
+      border: 1px solid #333333; /* Gray border */
+      border-radius: 12px; /* Rounded corners */
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.7),
+        0 2px 8px rgba(0, 0, 0, 0.4); /* Stronger shadows */
+      display: none; /* Hidden by default */
+      z-index: 1000; /* Ensure it's on top */
+      backdrop-filter: blur(16px); /* Strong frosted effect */
+      overflow: hidden;
+      min-width: 120px;
+    }
+
+    /* Decorative line at the top of the context menu */
+    #context-menu::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        transparent 100%
+      );
+    }
+
+    /* Context menu item styling */
+    #context-menu div {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.15s ease; /* Smooth hover transition */
+      position: relative;
+    }
+
+    /* Hover effects for context menu items */
+    #context-menu div:hover {
+      background: #333333; /* Darker gray on hover */
+      color: #fff;
+      padding-left: 20px; /* Slight indent on hover */
+    }
+
+    /* Rounded corners for first/last items on hover */
+    #context-menu div:first-child:hover {
+      border-radius: 12px 12px 0 0;
+    }
+
+    #context-menu div:last-child:hover {
+      border-radius: 0 0 12px 12px;
+    }
+
+    #context-menu div:only-child:hover {
+      border-radius: 12px;
+    }
+
+    /* Custom scrollbar styling for tab bar */
+    #tab-bar::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    #tab-bar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #tab-bar::-webkit-scrollbar-thumb {
+      background: #555555; /* Darker scrollbar thumb */
+      border-radius: 2px;
+    }
+
+    #tab-bar::-webkit-scrollbar-thumb:hover {
+      background: #777777; /* Even darker on hover */
+    }
+
+    /* Animation for new tabs sliding in */
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+      }
+    }
+
+    .tab:not(.new) {
+      animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Focus states for accessibility */
+    .tab:focus {
+      outline: 2px solid #777777; /* Darker focus outline */
+      outline-offset: 2px;
+    }
+
+    /* Custom scrollbar animations for Monaco editor (if applicable) */
+    .monaco-editor .decorationsOverviewRuler {
+      transition: all 0.2s ease;
+    }
+
+    .monaco-editor .view-lines {
+      transition: transform 0.1s ease-out;
+    }
+
+    /* Smooth cursor animations */
+    .monaco-editor .cursor {
+      transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    /* Line highlight smooth transition */
+    .monaco-editor .current-line {
+      transition: background-color 0.2s ease;
+    }
+
+    /* Suggestion widget smooth appearance */
+    .monaco-editor .suggest-widget {
+      animation: suggestFadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    @keyframes suggestFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Smooth text selection */
+    .monaco-editor .selected-text {
+      transition: background-color 0.15s ease;
+    }
+
+    /* Enhanced line number transitions */
+    .monaco-editor .line-numbers {
+      transition: color 0.2s ease;
+    }
+
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
+      #tab-bar {
+        height: 38px;
+        padding: 0 4px;
+      }
+
+      .tab {
+        padding: 0 12px;
+        height: 28px;
+        line-height: 28px;
+        font-size: 12px;
+        margin-right: 4px;
+        min-width: 70px;
+      }
+
+      .tab.new {
+        padding: 0 10px;
+        font-size: 16px;
+        min-width: 36px;
+      }
+
+      #editor-container {
+        top: 38px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="tab-bar"></div>
+  <div id="editor-container"></div>
+
+  <!-- Context Menu for tabs -->
+  <div id="context-menu">
+    <div data-action="rename">Rename</div>
+    <div data-action="delete">Delete</div>
+  </div>
+
+  <script>
+    // Configure Monaco loader to find its modules
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.39.0/min/vs' } });
+
+    // Load Monaco Editor and define its behavior
+    require(['vs/editor/editor.main'], () => {
+      // ─── Monaco Theme Definition: 'dark-black' ───────────────────────────
+      // This theme is designed for a dark, vibrant coding experience.
+      monaco.editor.defineTheme('dark-black', {
+        base: 'vs-dark', // Inherit from a base dark theme
+        inherit: true,   // Inherit colors not explicitly defined
+        rules: [
+          // General text color
+          { token: '', foreground: '#E0E0E0' }, // Off-white for general text
+
+          // Comments styling (a soft blue-gray)
+          { token: 'comment', foreground: '#7F8C8D' },
+
+          // Keywords (Lua and Luau specific, vibrant and distinct)
+          { token: 'keyword', foreground: '#BB86FC' }, // A light purple for keywords
+          { token: 'number', foreground: '#03DAC6' }, // Teal for numbers
+          { token: 'string', foreground: '#FFEB3B' }, // Yellow for strings
+          { token: 'delimiter', foreground: '#E0E0E0' }, // Punctuation like ()[]{}, (off-white)
+          { token: 'operator', foreground: '#BB86FC' }, // Operators (+-*/= etc.) (light purple)
+
+          // Function definitions, calls, and identifiers
+          { token: 'function', foreground: '#00C853' }, // Green for functions
+          { token: 'identifier', foreground: '#E0E0E0' }, // General identifiers (off-white)
+          { token: 'type', foreground: '#29B6F6' }, // Light blue for type annotations
+          { token: 'variable', foreground: '#00C853' }, // Variables (green)
+          { token: 'global', foreground: '#BB86FC' }, // Global variables (light purple)
+          { token: 'library', foreground: '#FF9800' }, // Orange for library functions
+
+          // Constants (true, false, nil)
+          { token: 'constant', foreground: '#03DAC6' }, // Teal for constants
+          { token: 'predefined', foreground: '#FF9800' }, // `print`, `pairs`, `ipairs` etc. (orange)
+
+          // Specific styling for Roblox APIs
+          { token: 'support.function', foreground: '#29B6F6' }, // For built-in Roblox functions/methods (light blue)
+          { token: 'support.class', foreground: '#03DAC6' }      // For Roblox classes like 'Instance', 'Vector3' (teal)
+        ],
+        colors: {
+          'editor.background': '#050505',
+          'editorLineNumber.foreground': '#777777',         // Line numbers (medium gray)
+          'editorCursor.foreground': '#FFFFFF',              // Cursor color (white)
+          'minimap.background': '#0a0a0a',                   // Minimap background to match theme
+          'minimap.slider.background': 'rgba(60, 60, 60, 0.5)',          // Minimap slider background
+          'minimap.slider.hoverBackground': 'rgba(80, 80, 80, 0.7)',     // Minimap slider hover background
+          'editor.foreground': '#E0E0E0',                    // Default editor text color
+          'editor.selectionBackground': '#3A3A3A',              // Selection background (darker gray)
+          'editor.inactiveSelectionBackground': '#3A3A3A80', // Inactive selection background (translucent darker gray)
+          'editor.lineHighlightBackground': '#1A1A1A',       // Current line highlight (subtler dark gray)
+          'editorIndentGuide.background': '#444444',         // Indent guides (dark gray for contrast)
+          'editorWhitespace.foreground': '#3B3A32',          // Whitespace characters (subtle)
+          'editorSuggestWidget.background': '#1A1A1A',       // Suggestion widget background
+          'editorSuggestWidget.border': '#444444',              // Suggestion widget border
+          'editorSuggestWidget.selectedBackground': '#3A3A3A',  // Selected suggestion background
+          'editorError.foreground': '#FF5555',               // Error squiggly line color (red)
+          'editorWarning.foreground': '#FFD700',             // Warning squiggly line color (gold)
+          'editorInfo.foreground': '#29B6F6'                // Info squiggly line color (light blue)
+        }
+      });
+
+      // ─── Utility function to extract local variables and functions ────────
+      // This function parses the current code to identify user-defined
+      // variables and functions, which can then be used for auto-completion.
+      function extractVariablesAndFunctions(code) {
+        const variables = new Set();
+        const functions = new Set();
+        const lines = code.split('\n');
+
+        for (const line of lines) {
+          let match;
+
+          // Regex to match local variable declarations (e.g., `local var`, `local var = val`)
+          const localVarPattern = /local\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*.*)?/g;
+          while ((match = localVarPattern.exec(line)) !== null) {
+            variables.add(match[1]);
+          }
+
+          // Regex to match assignments to existing or new variables (e.g., `var = val`)
+          // Excludes comparison operators to avoid false positives
+          const assignmentPattern = /([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*.*(?<!==)(?<!~=)(?<!<=)(?<!>=)/g;
+          while ((match = assignmentPattern.exec(line)) !== null) {
+            variables.add(match[1]);
+          }
+
+          // Regex to match function declarations (e.g., `function funcName()`, `local function funcName()`)
+          const funcPattern = /(?:local\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\(.*?\))?/g;
+          while ((match = funcPattern.exec(line)) !== null) {
+            functions.add(match[1]);
+          }
+
+          // Regex to match parameters in function definitions
+          const paramPattern = /function\s*[a-zA-Z_][a-zA-Z0-9_]*\s*\((.*?)\)/;
+          const paramsMatch = line.match(paramPattern);
+          if (paramsMatch && paramsMatch[1]) {
+            // Split parameters and remove type annotations (e.g., `param: string`)
+            paramsMatch[1].split(',').forEach(param => {
+              const trimmedParam = param.trim().split(':')[0].trim();
+              if (trimmedParam) {
+                variables.add(trimmedParam);
+              }
+            });
+          }
+
+          // Regex to match 'for' loop variables (e.g., `for i,v in pairs`, `for i = 1, 10`)
+          const forLoopPattern = /for\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*))?\s*(?:in|=)/g;
+          while ((match = forLoopPattern.exec(line)) !== null) {
+            variables.add(match[1]);
+            if (match[2]) {
+              variables.add(match[2]);
+            }
+          }
+        }
+
+        return { variables: Array.from(variables), functions: Array.from(functions) };
+      }
+
+      // ─── Luau Syntax Error Detection and Validation ───────────────────────
+      // This function provides basic syntax error checking tailored for Luau,
+      // helping developers catch common mistakes quickly.
+      function checkLuaSyntax(code) {
+        const errors = [];
+        const lines = code.split('\n');
+        // Stack to track 'do', 'if', 'function', 'repeat' blocks for `end` matching
+        const endStack = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const trimmedLine = line.trim();
+          const lineNum = i + 1;
+
+          // Basic unmatched bracket/parentheses check on a per-line basis
+          // (can be further improved for multi-line context)
+          const openBrackets = (line.match(/\[/g) || []).length;
+          const closeBrackets = (line.match(/\]/g) || []).length;
+          const openParens = (line.match(/\(/g) || []).length;
+          const closeParens = (line.match(/\)/g) || []).length;
+
+          if (openBrackets !== closeBrackets) {
+            errors.push({
+              startLineNumber: lineNum,
+              endLineNumber: lineNum,
+              startColumn: 1,
+              endColumn: line.length + 1,
+              message: 'Unmatched square brackets on this line. Check for missing `[` or `]`.',
+              severity: monaco.MarkerSeverity.Error
+            });
+          }
+
+          if (openParens !== closeParens) {
+            errors.push({
+              startLineNumber: lineNum,
+              endLineNumber: lineNum,
+              startColumn: 1,
+              endColumn: line.length + 1,
+              message: 'Unmatched parentheses on this line. Check for missing `(` or `)`.',
+              severity: monaco.MarkerSeverity.Error
+            });
+          }
+
+          // Check for keywords requiring 'then' or 'do'
+          // Ignoring lines that are entirely comments or partial comments
+          if (trimmedLine.startsWith('if ') && !/\sthen\b/.test(trimmedLine) && !trimmedLine.includes('--')) {
+            errors.push({
+              startLineNumber: lineNum,
+              endLineNumber: lineNum,
+              startColumn: 1,
+              endColumn: line.length + 1,
+              message: 'Missing "then" after "if" statement. Example: `if condition then`',
+              severity: monaco.MarkerSeverity.Error
+            });
+          }
+          if (trimmedLine.startsWith('for ') && !/\sdo\b/.test(trimmedLine) && !/\s=/.test(trimmedLine) && !trimmedLine.includes('--')) {
+            errors.push({
+              startLineNumber: lineNum,
+              endLineNumber: lineNum,
+              startColumn: 1,
+              endColumn: line.length + 1,
+              message: 'Missing "do" after "for" loop declaration. For numeric loops, ensure assignment (e.g., `for i = 1, 10 do`). For iterators, use `in` (e.g., `for i, v in pairs(tbl) do`).',
+              severity: monaco.MarkerSeverity.Error
+            });
+          }
+          if (trimmedLine.startsWith('while ') && !/\sdo\b/.test(trimmedLine) && !trimmedLine.includes('--')) {
+            errors.push({
+              startLineNumber: lineNum,
+              endLineNumber: lineNum,
+              startColumn: 1,
+              endColumn: line.length + 1,
+              message: 'Missing "do" after "while" loop condition. Example: `while condition do`',
+              severity: monaco.MarkerSeverity.Error
+            });
+          }
+
+          // Improved block ending checks for `end` and `until`
+          // Push block starters onto the stack
+          const blockStarters = /\b(if|for|while|function|do)\b/g;
+          while ((match = blockStarters.exec(trimmedLine)) !== null) {
+              endStack.push({ type: match[1], line: lineNum, column: match.index + 1 });
+          }
+
+          if (/\brepeat\b/.test(trimmedLine)) {
+              endStack.push({ type: 'repeat', line: lineNum, column: trimmedLine.indexOf('repeat') + 1 });
+          } else if (/\bend\b/.test(trimmedLine)) {
+              if (endStack.length > 0) {
+                  endStack.pop(); // Pop corresponding block starter
+              } else {
+                  // Unmatched 'end'
+                  errors.push({
+                      startLineNumber: lineNum,
+                      endLineNumber: lineNum,
+                      startColumn: trimmedLine.indexOf('end') + 1,
+                      endColumn: trimmedLine.indexOf('end') + 4,
+                      message: 'Unmatched "end". This "end" might not have a corresponding block (if, for, while, function, do, repeat).',
+                      severity: monaco.MarkerSeverity.Error
+                  });
+              }
+          } else if (/\buntil\b/.test(trimmedLine)) {
+              // 'until' must match a 'repeat'
+              if (endStack.length > 0 && endStack[endStack.length - 1].type === 'repeat') {
+                  endStack.pop();
+              } else {
+                  errors.push({
+                      startLineNumber: lineNum,
+                      endLineNumber: lineNum,
+                      startColumn: trimmedLine.indexOf('until') + 1,
+                      endColumn: trimmedLine.indexOf('until') + 6,
+                      message: 'Unmatched "until". This "until" might not have a corresponding "repeat" statement.',
+                      severity: monaco.MarkerSeverity.Error
+                  });
+              }
+          }
+
+          // Check for incomplete assignment (e.g., `local var =` or `var =`)
+          const incompleteAssignment = /^\s*(local\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*$|[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*$)/;
+          if (incompleteAssignment.test(trimmedLine)) {
+            errors.push({
+              startLineNumber: lineNum,
+              endLineNumber: lineNum,
+              startColumn: trimmedLine.match(incompleteAssignment).index + 1,
+              endColumn: line.length + 1,
+              message: 'Incomplete assignment. Expected a value after "=". Example: `local x = 10`',
+              severity: monaco.MarkerSeverity.Error
+            });
+          }
+
+          // Check for expressions ending with an operator without a value (ignores comments)
+          const trailingOperator = /[+\-*/%^&|~=<>,]\s*$/;
+          if (trailingOperator.test(trimmedLine) && !trimmedLine.includes('--')) {
+              errors.push({
+                  startLineNumber: lineNum,
+                  endLineNumber: lineNum,
+                  startColumn: trimmedLine.match(trailingOperator).index + 1,
+                  endColumn: line.length + 1,
+                  message: 'Expression ends with an operator. Expected a value after the operator.',
+                  severity: monaco.MarkerSeverity.Error
+              });
+          }
+
+          // Check for missing variable name after `local`
+          if (/\blocal\s*$/.test(trimmedLine)) {
+              errors.push({
+                  startLineNumber: lineNum,
+                  endLineNumber: lineNum,
+                  startColumn: trimmedLine.indexOf('local') + 1,
+                  endColumn: line.length + 1,
+                  message: 'Missing variable name after "local". Example: `local myVariable`',
+                  severity: monaco.MarkerSeverity.Error
+              });
+          }
+
+          // Check for invalid local declarations like `local game.Players` (cannot declare dotted names as local)
+          if (/\blocal\s+([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*/.test(trimmedLine)) {
+              errors.push({
+                  startLineNumber: lineNum,
+                  endLineNumber: lineNum,
+                  startColumn: trimmedLine.match(/\blocal\s+([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*/).index + 1,
+                  endColumn: line.length + 1,
+                  message: 'Cannot declare local variables with dotted names (e.g., `local game.Players` is invalid).',
+                  severity: monaco.MarkerSeverity.Error
+              });
+          }
+
+          // Check for malformed function declarations (e.g., `function ()` or `function myFunc` without parens)
+          if (/\bfunction\s*(?![a-zA-Z_][a-zA-Z0-9_]*\s*\(.*\))/.test(trimmedLine) && !trimmedLine.includes('--')) {
+            const funcIndex = trimmedLine.indexOf('function');
+            if (funcIndex !== -1) {
+              const restOfLine = trimmedLine.substring(funcIndex + 'function'.length).trim();
+              if (!restOfLine.match(/^[a-zA-Z_][a-zA-Z0-9_]*\s*\(.*\)$/)) {
+                errors.push({
+                  startLineNumber: lineNum,
+                  endLineNumber: lineNum,
+                  startColumn: funcIndex + 1,
+                  endColumn: line.length + 1,
+                  message: 'Malformed function declaration. Expected `function name(...)` or `local function name(...)`.',
+                  severity: monaco.MarkerSeverity.Error
+                });
+              }
+            }
+          }
+
+          // Detect repeated keywords/globals for invalid syntax
+          const repeatedKeywordPatterns = [
+              { pattern: /\blocal\s+local\b/g, message: 'Invalid syntax: "local" cannot be followed by "local". Expected a variable name or function declaration.' },
+              { pattern: /\bfunction\s+function\b/g, message: 'Invalid syntax: "function" cannot be followed by "function". Expected a function name.' },
+              { pattern: /\bend\s+end\b/g, message: 'Invalid syntax: "end" cannot be followed by "end". This usually indicates an extra "end".' },
+              { pattern: /\bif\s+if\b/g, message: 'Invalid syntax: "if" cannot be followed by "if". Expected a condition.' },
+              { pattern: /\bfor\s+for\b/g, message: 'Invalid syntax: "for" cannot be followed by "for". Expected a loop variable or iteration.' },
+              { pattern: /\bwhile\s+while\b/g, message: 'Invalid syntax: "while" cannot be followed by "while". Expected a condition.' },
+              { pattern: /\bdo\s+do\b/g, message: 'Invalid syntax: "do" cannot be followed by "do".' },
+              { pattern: /\brepeat\s+repeat\b/g, message: 'Invalid syntax: "repeat" cannot be followed by "repeat".' },
+              { pattern: /\bthen\s+then\b/g, message: 'Invalid syntax: "then" cannot be followed by "then".' },
+              { pattern: /\belse\s+else\b/g, message: 'Invalid syntax: "else" cannot be followed by "else".' },
+              { pattern: /\belseif\s+elseif\b/g, message: 'Invalid syntax: "elseif" cannot be followed by "elseif".' },
+              { pattern: /\bgetgenv\s+getgenv\b/g, message: 'Invalid syntax: "getgenv" cannot be followed by "getgenv".' },
+              { pattern: /\bgame\s+game\b/g, message: 'Invalid syntax: "game" cannot be followed by "game". Did you mean `game.Workspace` or `game:GetService()`?' },
+              { pattern: /\bworkspace\s+workspace\b/g, message: 'Invalid syntax: "workspace" cannot be followed by "workspace". Did you mean `workspace.Part`?' },
+              { pattern: /\bscript\s+script\b/g, message: 'Invalid syntax: "script" cannot be followed by "script". Did you mean `script.Parent`?' }
+          ];
+
+          repeatedKeywordPatterns.forEach(({ pattern, message }) => {
+              let repetitionMatch;
+              while ((repetitionMatch = pattern.exec(trimmedLine)) !== null) {
+                  errors.push({
+                      startLineNumber: lineNum,
+                      endLineNumber: lineNum,
+                      startColumn: repetitionMatch.index + 1,
+                      endColumn: repetitionMatch.index + repetitionMatch[0].length + 1,
+                      message: message,
+                      severity: monaco.MarkerSeverity.Error
+                  });
+              }
+          });
+
+          // Check for common Roblox method call using dot instead of colon (e.g., game.GetService)
+          // This is a common Luau mistake.
+          if (/\bgame\.GetService\b/.test(trimmedLine)) {
+              errors.push({
+                  startLineNumber: lineNum,
+                  endLineNumber: lineNum,
+                  startColumn: trimmedLine.indexOf('game.GetService') + 1,
+                  endColumn: trimmedLine.indexOf('game.GetService') + 'game.GetService'.length + 1,
+                  message: 'Method call should use a colon. Did you mean `game:GetService()`?',
+                  severity: monaco.MarkerSeverity.Warning // Suggestion, not a hard error
+              });
+          }
+
+          // Common typos/misspellings as warnings
+          const typos = [
+            { regex: /\b(functionn|funtion)\b/i, correct: 'function' },
+            { regex: /\b(lcoal)\b/i, correct: 'local' },
+            { regex: /\b(whille)\b/i, correct: 'while' },
+            { regex: /\b(retun|reutrn)\b/i, correct: 'return' }
+          ];
+
+          typos.forEach(typo => {
+            const match = trimmedLine.match(typo.regex);
+            if (match) {
+              errors.push({
+                startLineNumber: lineNum,
+                endLineNumber: lineNum,
+                startColumn: match.index + 1,
+                endColumn: match.index + match[0].length + 1,
+                message: `Possible typo: Did you mean "${typo.correct}"?`,
+                severity: monaco.MarkerSeverity.Warning
+              });
+            }
+          });
+        }
+
+        // Check for any remaining unclosed blocks at the end of the file
+        while (endStack.length > 0) {
+            const unclosed = endStack.pop();
+            errors.push({
+                startLineNumber: unclosed.line,
+                endLineNumber: unclosed.line, // Error ends on the line where the block started
+                startColumn: unclosed.column,
+                endColumn: lines[unclosed.line - 1].length + 1,
+                message: `Unclosed "${unclosed.type}" block. Missing "end".`,
+                severity: monaco.MarkerSeverity.Error
+            });
+        }
+
+        return errors;
+      }
+
+      // ─── Enhanced Autocomplete Provider for Luau ──────────────────────────
+      monaco.languages.registerCompletionItemProvider('lua', {
+        provideCompletionItems: (model, position) => {
+          const code = model.getValue();
+          // Extract user-defined variables and functions for dynamic suggestions
+          const { variables, functions } = extractVariablesAndFunctions(code);
+          const line = model.getLineContent(position.lineNumber);
+          const textUntilPosition = line.substring(0, position.column - 1);
+          const word = model.getWordUntilPosition(position);
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+          };
+
+          const suggestions = [];
+
+          // Trimmed text for contextual checks
+          const trimmedTextUntilPosition = textUntilPosition.trim();
+          // Get the last word typed before the cursor
+          const lastWordMatch = trimmedTextUntilPosition.match(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
+          const lastWord = lastWordMatch ? lastWordMatch[1] : '';
+
+          // --- Contextual Lua/Luau Keywords ---
+          const keywords = [
+            { label: 'and', documentation: 'Logical AND operator. Returns its first argument if it is false or nil; otherwise, returns its second argument.' },
+            { label: 'break', documentation: 'Terminates the execution of a while, repeat, or for loop, and continues execution after the loop.' },
+            { label: 'do', documentation: 'Starts a `do ... end` block, or part of `for` and `while` loops.' },
+            { label: 'else', documentation: 'Part of an `if` statement, executed if all preceding conditions are false.' },
+            { label: 'elseif', documentation: 'Combines `else` and `if` for chained conditional checks.' },
+            // Modified 'end' to include '()'
+            { label: 'end', insertText: 'end()', documentation: 'Closes a block (if, for, while, function, do, repeat).' },
+            { label: 'false', documentation: 'Boolean literal representing falsity.' },
+            { label: 'for', documentation: 'Starts a numeric or generic `for` loop.' },
+            { label: 'function', documentation: 'Defines a function.' },
+            { label: 'if', documentation: 'Starts a conditional `if` statement.' },
+            { label: 'in', documentation: 'Used with `for` loop for iterating over iterators (e.g., `pairs`, `ipairs`).' },
+            { label: 'local', documentation: 'Declares a local variable or function, limiting its scope.' },
+            { label: 'nil', documentation: 'Represents the absence of a value or an undefined variable.' },
+            { label: 'not', documentation: 'Logical NOT operator. Returns true if its argument is false or nil; otherwise, returns false.' },
+            { label: 'or', documentation: 'Logical OR operator. Returns its first argument if it is not false or nil; otherwise, returns its second argument.' },
+            { label: 'repeat', documentation: 'Starts a `repeat ... until` loop, which executes its body at least once.' },
+            { label: 'return', documentation: 'Returns values from a function or from a chunk.' },
+            { label: 'then', documentation: 'Part of an `if` statement, executed if the condition is true.' },
+            { label: 'true', documentation: 'Boolean literal representing truth.' },
+            { label: 'until', documentation: 'Ends a `repeat` loop, continuing until the condition is true.' },
+            { label: 'while', documentation: 'Starts a `while` loop, which executes its body as long as its condition is true.' }
+          ];
+
+          // Special handling for 'local' keyword:
+          // Suggest 'local' only if it's at the beginning of a line, or after an 'end', 'then', or 'do' keyword.
+          if (trimmedTextUntilPosition === '' || /\b(end|then|do)\s*$/.test(trimmedTextUntilPosition) || textUntilPosition.endsWith(';') || /^\s*$/.test(textUntilPosition.replace(word.word, ''))) {
+              if (lastWord !== 'local' && !textUntilPosition.includes('local ')) { // Prevent 'local local' or suggesting local multiple times on the same line.
+                suggestions.push({
+                    label: 'local',
+                    kind: monaco.languages.CompletionItemKind.Keyword,
+                    insertText: 'local ', // Add space to prompt for variable name/function
+                    documentation: 'Declares a local variable or function, limiting its scope.',
+                    range: range,
+                    command: { id: 'editor.action.triggerSuggest', title: 'Trigger Suggest' } // Immediately trigger suggestions after 'local '
+                });
+              }
+          }
+
+          // Add other keywords, filtering out redundant suggestions (e.g., preventing `if if`)
+          keywords.forEach(kw => {
+            if (kw.label === 'local') return; // Handled separately
+            // Prevent suggesting the same keyword immediately after it (e.g., `table table`, but allow `for for` if that's valid syntax in some context)
+            if (lastWord === kw.label && kw.label !== 'in' && kw.label !== 'then' && kw.label !== 'do') { // 'in' is often part of 'for i,v in pairs'
+                return;
+            }
+            // If the current word is exactly the same as the keyword, don't suggest it (it's already typed)
+            if (kw.label === word.word) {
+                return;
+            }
+
+            suggestions.push({
+              label: kw.label,
+              kind: monaco.languages.CompletionItemKind.Keyword,
+              insertText: kw.insertText || kw.label, // Use insertText if provided (for 'end'), else label
+              documentation: kw.documentation,
+              range: range
+            });
+          });
+
+          // --- Lua Standard Library Functions ---
+          const luaStdFunctions = [
+            // Global functions
+            { label: 'assert', insertText: 'assert(${1:condition}, "${2:message}")', documentation: 'Checks if its first argument is true, otherwise raises an error.' },
+            { label: 'error', insertText: 'error("${1:message}")', documentation: 'Terminates the last protected call and returns message.' },
+            { label: 'getmetatable', insertText: 'getmetatable(${1:object})', documentation: 'Returns the metatable of the given object.' },
+            { label: 'ipairs', insertText: 'ipairs(${1:table})', documentation: 'An iterator function that iterates over the numeric indices of an array-like table.' },
+            { label: 'next', insertText: 'next(${1:table}${2:, ${3:index}})', documentation: 'Allows traversal of all fields in a table. Used internally by `pairs`.' },
+            { label: 'pairs', insertText: 'pairs(${1:table})', documentation: 'An iterator function that iterates over all key-value pairs of a table.' },
+            { label: 'pcall', insertText: 'pcall(${1:function}, ${2:arguments})', documentation: 'Calls a function in protected mode. Catches errors without stopping execution.' },
+            { label: 'print', insertText: 'print(${1:message})', documentation: 'Outputs arguments to the console.' },
+            { label: 'rawequal', insertText: 'rawequal(${1:v1}, ${2:v2})', documentation: 'Checks if two values are equal without invoking metamethods.' },
+            { label: 'rawget', insertText: 'rawget(${1:table}, ${2:index})', documentation: 'Retrieves a table element without invoking metatables.' },
+            { label: 'rawset', insertText: 'rawset(${1:table}, ${2:index}, ${3:value})', documentation: 'Sets a table element without invoking metatables.' },
+            { label: 'select', insertText: 'select(${1:index}, ${2:arguments})', documentation: 'Returns selected arguments from a variable number of arguments.' },
+            { label: 'setmetatable', insertText: 'setmetatable(${1:table}, ${2:metatable})', documentation: 'Sets the metatable of a given table.' },
+            { label: 'tonumber', insertText: 'tonumber(${1:value})', documentation: 'Converts its argument to a number.' },
+            { label: 'tostring', insertText: 'tostring(${1:value})', documentation: 'Converts its argument to a string.' },
+            { label: 'type', insertText: 'type(${1:value})', documentation: 'Returns the type of its argument as a string.' },
+            { label: 'unpack', insertText: 'unpack(${1:table})', documentation: 'Returns elements from a table as multiple return values (deprecated in Lua 5.2+, but often available in Luau/Roblox).' },
+            { label: 'xpcall', insertText: 'xpcall(${1:function}, ${2:errhandler}, ${3:arguments})', documentation: 'Calls a function in protected mode with an error handler.' },
+            // Modified 'HookMetaMethod'
+            { label: 'GetMetaMethod', insertText: 'GetMetaMethod("${1:methodName}")', documentation: 'Returns the metatable method by name if it exists.' },
+            { label: 'HookMetaMethod', insertText: 'HookMetaMethod()', documentation: 'Hooks a metamethod, allowing you to intercept and modify its behavior.' },
+
+            // Math library functions
+            { label: 'math.abs', insertText: 'math.abs(${1:x})', documentation: 'Returns the absolute value of `x`.' },
+            { label: 'math.acos', insertText: 'math.acos(${1:x})', documentation: 'Returns the arc cosine of `x` (in radians).' },
+            { label: 'math.asin', insertText: 'math.asin(${1:x})', documentation: 'Returns the arc sine of `x` (in radians).' },
+            { label: 'math.atan', insertText: 'math.atan(${1:x})', documentation: 'Returns the arc tangent of `x` (in radians).' },
+            { label: 'math.atan2', insertText: 'math.atan2(${1:y}, ${2:x})', documentation: 'Returns the arc tangent of `y/x` (in radians), using the signs of both arguments to determine the quadrant.' },
+            { label: 'math.ceil', insertText: 'math.ceil(${1:x})', documentation: 'Returns the smallest integer greater than or equal to `x`.' },
+            { label: 'math.cos', insertText: 'math.cos(${1:x})', documentation: 'Returns the cosine of `x` (assumed to be in radians).' },
+            { label: 'math.cosh', insertText: 'math.cosh(${1:x})', documentation: 'Returns the hyperbolic cosine of `x`.' },
+            { label: 'math.deg', insertText: 'math.deg(${1:x})', documentation: 'Converts radians to degrees.' },
+            { label: 'math.exp', insertText: 'math.exp(${1:x})', documentation: 'Returns e^x.' },
+            { label: 'math.floor', insertText: 'math.floor(${1:x})', documentation: 'Returns the largest integer less than or equal to `x`.' },
+            { label: 'math.fmod', insertText: 'math.fmod(${1:x}, ${2:y})', documentation: 'Returns the remainder of the division of `x` by `y` that rounds the quotient towards zero.' },
+            { label: 'math.frexp', insertText: 'math.frexp(${1:x})', documentation: 'Returns `m` and `e` such that `x = m * 2^e`.' },
+            { label: 'math.huge', insertText: 'math.huge', documentation: 'Represents the value positive infinity.' },
+            { label: 'math.ldexp', insertText: 'math.ldexp(${1:m}, ${2:e})', documentation: 'Returns `m * 2^e`.' },
+            { label: 'math.log', insertText: 'math.log(${1:x})', documentation: 'Returns the natural logarithm of `x`.' },
+            { label: 'math.max', insertText: 'math.max(${1:x}, ${2:y})', documentation: 'Returns the maximum of its arguments.' },
+            { label: 'math.min', insertText: 'math.min(${1:x}, ${2:y})', documentation: 'Returns the minimum of its arguments.' },
+            { label: 'math.modf', insertText: 'math.modf(${1:x})', documentation: 'Returns the integer part and fractional part of `x`.' },
+            { label: 'math.pi', insertText: 'math.pi', documentation: 'The value of pi.' },
+            { label: 'math.pow', insertText: 'math.pow(${1:x}, ${2:y})', documentation: 'Returns `x^y`.' },
+            { label: 'math.rad', insertText: 'math.rad(${1:x})', documentation: 'Converts degrees to radians.' },
+            { label: 'math.random', insertText: 'math.random(${1:m}${2:, ${3:n}})', documentation: 'Generates pseudo-random numbers.' },
+            { label: 'math.randomseed', insertText: 'math.randomseed(${1:seed})', documentation: 'Sets the seed for the pseudo-random number generator.' },
+            { label: 'math.sin', insertText: 'math.sin(${1:x})', documentation: 'Returns the sine of `x` (assumed to be in radians).' },
+            { label: 'math.sinh', insertText: 'math.sinh(${1:x})', documentation: 'Returns the hyperbolic sine of `x`.' },
+            { label: 'math.sqrt', insertText: 'math.sqrt(${1:x})', documentation: 'Returns the square root of `x`.' },
+            { label: 'math.tan', insertText: 'math.tan(${1:x})', documentation: 'Returns the tangent of `x` (assumed to be in radians).' },
+            { label: 'math.tanh', insertText: 'math.tanh(${1:x})', documentation: 'Returns the hyperbolic tangent of `x`.' },
+
+            // String library functions
+            { label: 'string.byte', insertText: 'string.byte(${1:s}${2:, ${3:i}}${4:, ${5:j}})', documentation: 'Returns the numerical ASCII value of a character in a string.' },
+            { label: 'string.char', insertText: 'string.char(${1:ascii_codes})', documentation: 'Converts numerical ASCII values to characters.' },
+            { label: 'string.dump', insertText: 'string.dump(${1:function})', documentation: 'Returns a string containing a binary representation of the given function.' },
+            { label: 'string.find', insertText: 'string.find(${1:s}, "${2:pattern}"${3:, ${4:init}}${5:, ${6:plain}})', documentation: 'Searches for the first occurrence of a pattern in a string.' },
+            { label: 'string.format', insertText: 'string.format("${1:format_string}"${2:, ${3:arguments}})', documentation: 'Returns a formatted version of its arguments.' },
+            { label: 'string.gmatch', insertText: 'string.gmatch(${1:s}, "${2:pattern}")', documentation: 'Creates an iterator that iterates over all occurrences of a pattern in a string.' },
+            { label: 'string.gsub', insertText: 'string.gsub(${1:s}, "${2:pattern}", ${3:replacement}${4:, ${5:n}})', documentation: 'Replaces all occurrences of a pattern in a string.' },
+            { label: 'string.len', insertText: 'string.len(${1:s})', documentation: 'Returns the length of a string.' },
+            { label: 'string.lower', insertText: 'string.lower(${1:s})', documentation: 'Converts a string to lowercase.' },
+            { label: 'string.match', insertText: 'string.match(${1:s}, "${2:pattern}"${3:, ${4:init}})', documentation: 'Returns the first capture of a pattern in a string.' },
+            { label: 'string.rep', insertText: 'string.rep(${1:s}, ${2:n})', documentation: 'Returns a string that is the concatenation of `n` copies of the string `s`.' },
+            { label: 'string.reverse', insertText: 'string.reverse(${1:s})', documentation: 'Returns a reversed version of a string.' },
+            { label: 'string.sub', insertText: 'string.sub(${1:s}, ${2:i}${3:, ${4:j}})', documentation: 'Returns a substring of a string.' },
+            { label: 'string.upper', insertText: 'string.upper(${1:s})', documentation: 'Converts a string to uppercase.' },
+
+            // Table library functions (includes Luau specific ones)
+            { label: 'table.concat', insertText: 'table.concat(${1:table}${2:, ${3:sep}}${4:, ${5:i}}${6:, ${7:j}})', documentation: 'Concatenates the elements of a table into a string.' },
+            { label: 'table.insert', insertText: 'table.insert(${1:table}, ${2:value}${3:, ${4:pos}})', documentation: 'Inserts an element into a table at a specified position.' },
+            { label: 'table.maxn', insertText: 'table.maxn(${1:table})', documentation: 'Returns the maximum numeric index in a table (deprecated in Luau).' },
+            { label: 'table.remove', insertText: 'table.remove(${1:table}${2:, ${3:pos}})', documentation: 'Removes an element from a table at a specified position.' },
+            { label: 'table.sort', insertText: 'table.sort(${1:table}${2:, ${3:comp}})', documentation: 'Sorts the elements of a table.' },
+            { label: 'table.create', insertText: 'table.create(${1:capacity}${2:, ${3:value}})', documentation: 'Creates a table with pre-allocated size (Luau specific).' },
+            { label: 'table.freeze', insertText: 'table.freeze(${1:table})', documentation: 'Makes a table immutable (Luau specific).' },
+            { label: 'table.isfrozen', insertText: 'table.isfrozen(${1:table})', documentation: 'Checks if a table is frozen (Luau specific).' },
+            { label: 'table.clone', insertText: 'table.clone(${1:table})', documentation: 'Creates a shallow copy of a table (Luau specific).' },
+            { label: 'table.find', insertText: 'table.find(${1:table}, ${2:value}${3:, ${4:startIndex}})', documentation: 'Searches for a value in a table and returns its index (Luau specific).' },
+            { label: 'table.move', insertText: 'table.move(${1:a1}, ${2:f}, ${3:e}, ${4:t}${5:, ${6:a2}})', documentation: 'Moves elements from one part of a table to another, or to a different table (Luau specific).' },
+
+            // IO library functions (some restricted in Roblox)
+            { label: 'io.close', insertText: 'io.close(${1:file})', documentation: 'Closes an open file.' },
+            { label: 'io.flush', insertText: 'io.flush()', documentation: 'Flushes the output buffer.' },
+            { label: 'io.input', insertText: 'io.input(${1:file})', documentation: 'Sets or gets the current input file.' },
+            { label: 'io.lines', insertText: 'io.lines(${1:filename})', documentation: 'Creates an iterator function that reads lines from the current input file.' },
+            { label: 'io.open', insertText: 'io.open("${1:filename}", "${2:mode}")', documentation: 'Opens a file in a specified mode.' },
+            { label: 'io.output', insertText: 'io.output(${1:file})', documentation: 'Sets or gets the current output file.' },
+            { label: 'io.read', insertText: 'io.read(${1:formats})', documentation: 'Reads content from the current input file.' },
+            { label: 'io.stderr', insertText: 'io.stderr', documentation: 'The standard error file handle.' },
+            { label: 'io.stdin', insertText: 'io.stdin', documentation: 'The standard input file handle.' },
+            { label: 'io.stdout', insertText: 'io.stdout', documentation: 'The standard output file handle.' },
+            { label: 'io.tmpfile', insertText: 'io.tmpfile()', documentation: 'Returns a handle for a temporary file.' },
+            { label: 'io.type', insertText: 'io.type(${1:object})', documentation: 'Returns the type of a file handle.' },
+            { label: 'io.write', insertText: 'io.write(${1:args})', documentation: 'Writes content to the current output file.' },
+
+            // OS library functions (some restricted in Roblox)
+            { label: 'os.clock', insertText: 'os.clock()', documentation: 'Returns the approximate number of CPU seconds used by the program.' },
+            { label: 'os.date', insertText: 'os.date("${1:format}"${2:, ${3:time}})', documentation: 'Formats a number representing a date and time to a string, or returns a table with date/time components.' },
+            { label: 'os.difftime', insertText: 'os.difftime(${1:t2}, ${2:t1})', documentation: 'Returns the difference between two date/time values.' },
+            { label: 'os.execute', insertText: 'os.execute("${1:command}")', documentation: 'Executes a system command.' },
+            { label: 'os.exit', insertText: 'os.exit(${1:code}${2:, ${3:close}})', documentation: 'Terminates the current program.' },
+            { label: 'os.getenv', insertText: 'os.getenv("${1:varname}")', documentation: 'Returns the value of an environment variable.' },
+            { label: 'os.remove', insertText: 'os.remove("${1:filename}")', documentation: 'Deletes a file.' },
+            { label: 'os.rename', insertText: 'os.rename("${1:oldname}", "${2:newname}")', documentation: 'Renames a file or directory.' },
+            { label: 'os.setlocale', insertText: 'os.setlocale("${1:locale}"${2:, ${3:category}})', documentation: 'Sets the current locale for the program.' },
+            { label: 'os.time', insertText: 'os.time(${1:table})', documentation: 'Returns the current time in seconds since the epoch, or a date/time value for a given table.' },
+            { label: 'os.tmpname', insertText: 'os.tmpname()', documentation: 'Returns a string with a unique file name.' },
+
+            // Coroutine library functions
+            { label: 'coroutine.create', insertText: 'coroutine.create(${1:function})', documentation: 'Creates a new coroutine (thread) from a given function.' },
+            { label: 'coroutine.resume', insertText: 'coroutine.resume(${1:coroutine}${2:, ${3:arguments}})', documentation: 'Resumes the execution of a coroutine.' },
+            { label: 'coroutine.running', insertText: 'coroutine.running()', documentation: 'Returns the currently running coroutine.' },
+            { label: 'coroutine.status', insertText: 'coroutine.status(${1:coroutine})', documentation: 'Returns the status of a coroutine.' },
+            { label: 'coroutine.wrap', insertText: 'coroutine.wrap(${1:function})', documentation: 'Creates a function that resumes a coroutine when called.' },
+            { label: 'coroutine.yield', insertText: 'coroutine.yield(${1:arguments})', documentation: 'Suspends the execution of the calling coroutine.' },
+
+            // Debug library (some methods are restricted or behave differently in Luau)
+            { label: 'debug.traceback', insertText: 'debug.traceback(${1:thread}${2:, ${3:message}}${4:, ${5:level}})', documentation: 'Returns a string with a stack traceback.' },
+            { label: 'debug.getfenv', insertText: 'debug.getfenv(${1:object})', documentation: 'Returns the environment of a function (deprecated).' },
+            { label: 'debug.setfenv', insertText: 'debug.setfenv(${1:object}, ${2:table})', documentation: 'Sets the environment of a function (deprecated).' }
+          ];
+          luaStdFunctions.forEach(func => {
+            // Prevent suggesting `func func` for top-level functions (e.g., `print print`)
+            if (lastWord === func.label.split('.')[0] && func.label.split('.').length === 1) {
+                return;
+            }
+            suggestions.push({
+              label: func.label,
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: func.insertText,
+              // Only apply snippet rules if insertText uses placeholders (e.g., ${1:arg})
+              insertTextRules: func.insertText.includes('${') ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
+              documentation: func.documentation,
+              range: range
+            });
+          });
+
+          // --- Roblox-Specific Globals and Common Services/Classes ---
+          const robloxGlobals = [
+            { label: 'game', documentation: 'The top-level object representing the Roblox game environment.' },
+            { label: 'workspace', documentation: 'The default container for all physical objects in the game world.' },
+            { label: 'shared', documentation: 'A global table accessible across different script contexts.' },
+            { label: '_G', documentation: 'The global environment table in Lua.' },
+            { label: 'script', documentation: 'Refers to the current running Script or LocalScript instance.' },
+            { label: 'Player', documentation: 'Represents a player in the game.' },
+            { label: 'Enum', documentation: 'Access point for all Roblox Enum types and their members.' },
+            { label: 'Vector3', documentation: 'A 3D vector representing a point or direction in space.' },
+            { label: 'CFrame', documentation: 'A coordinate frame that defines a position and orientation in 3D space.' },
+            { label: 'UDim2', documentation: 'A 2D dimension used for UI sizing, composed of a scale and offset.' },
+            { label: 'Color3', documentation: 'Represents an RGB color with values from 0 to 1.' },
+            { label: 'Instance', documentation: 'The base class for all objects in the Roblox data model.' },
+            { label: 'BrickColor', documentation: 'Represents a color from the standard Roblox palette.' },
+            { label: 'Ray', documentation: 'A line segment with a starting point and a direction, used for raycasting.' },
+            { label: 'TweenInfo', documentation: 'Defines properties for a tween animation, such as duration and easing style.' },
+            { label: 'Axes', documentation: 'An Enum used to represent specific axes (X, Y, Z).' },
+            { label: 'Faces', documentation: 'An Enum used to represent specific faces of a part (Top, Bottom, Front, Back, Left, Right).' },
+            { label: 'Vector2', documentation: 'A 2D vector representing a point or direction in a 2D plane.' },
+            { label: 'UDim', documentation: 'A 1D dimension used for UI sizing (a single component of UDim2).' },
+            { label: 'ColorSequence', documentation: 'Defines a gradient of colors over a time or distance.' },
+            { label: 'NumberSequence', documentation: 'Defines a gradient of numbers over a time or distance.' },
+            { label: 'Rect', documentation: 'Represents a rectangular region in 2D space.' },
+            { label: 'PhysicalProperties', documentation: 'Defines physical properties of a BasePart like density, friction, and elasticity.' },
+            { label: 'RBXScriptSignal', documentation: 'Represents an event that scripts can connect to.' },
+            { label: 'RBXScriptConnection', documentation: 'Represents a connection made by connecting a function to an RBXScriptSignal.' },
+            { label: 'debug.profilebegin', insertText: 'debug.profilebegin("${1:name}")', documentation: 'Starts a performance profiling session for a code block (Luau specific).' },
+            { label: 'debug.profileend', insertText: 'debug.profileend()', documentation: 'Ends a performance profiling session for a code block (Luau specific).' },
+            { label: 'settings', documentation: 'Provides access to engine settings and preferences.' },
+            { label: 'plugin', documentation: 'Refers to a plugin script running in Roblox Studio.' },
+            { label: 'UserSettings', documentation: 'Provides access to user-specific Studio settings.' },
+            { label: 'loadstring', insertText: 'loadstring(${1:codeString})', documentation: 'Executes a string as Lua code (often restricted for security reasons in Roblox, but exists).' },
+            { label: 'getfenv', insertText: 'getfenv(${1:object})', documentation: 'Returns the environment table of a function (deprecated in Luau).' },
+            { label: 'setfenv', insertText: 'setfenv(${1:object}, ${2:table})', documentation: 'Sets the environment table of a function (deprecated in Luau).' },
+            { label: 'getgenv', insertText: 'getgenv()', documentation: 'Returns the current global environment. Often used in exploit contexts or specific Studio environments.' },
+            { label: 'getrenv', insertText: 'getrenv()', documentation: 'Returns the Roblox environment. Often used in exploit contexts.' },
+            { label: 'islualive', insertText: 'islualive(${1:thread})', documentation: 'Checks if a Lua thread is still running.' },
+            { label: 'newproxy', insertText: 'newproxy(${1:metatable})', documentation: 'Creates a lightweight userdata object with a metatable (Luau specific).' },
+            { label: 'warn', insertText: 'warn(${1:message})', documentation: 'Prints a warning message to the output window.' },
+            { label: 'collectgarbage', insertText: 'collectgarbage("${1:option}")', documentation: 'Controls the garbage collector.' },
+            { label: 'ElapsedTime', insertText: 'ElapsedTime()', documentation: 'Returns the time elapsed since the game started in seconds.' },
+            { label: 'gcinfo', insertText: 'gcinfo()', documentation: 'Returns the amount of memory (in Kbytes) currently used by Lua.' },
+            { label: 'time', insertText: 'time()', documentation: 'Returns the current time in seconds since the epoch.' },
+            { label: 'tick', insertText: 'tick()', documentation: 'Returns the current time in seconds since the epoch, on the local machine.' },
+            { label: 'printidentity', insertText: 'printidentity()', documentation: 'Prints the identity of the script or thread (security context).' },
+            { label: 'delay', insertText: 'delay(${1:delayTime}, ${2:function})', documentation: 'Schedules a function to run after a delay, without yielding the current thread (legacy, use `task.delay`).' },
+            { label: 'spawn', insertText: 'spawn(${1:function})', documentation: 'Spawns a new thread to run a function in parallel (legacy, use `task.spawn`).' },
+            { label: 'wait', insertText: 'wait(${1:seconds})', documentation: 'Yields the current thread and resumes after a specified number of seconds or the next resume cycle (legacy, use `task.wait`).' },
+            { label: 'task.wait', insertText: 'task.wait(${1:seconds})', documentation: 'Yields the current thread for the given number of seconds. Preferred over `wait()`.' },
+            { label: 'task.spawn', insertText: 'task.spawn(${1:function}${2:, ${3:arguments}})', documentation: 'Spawns a new thread to run a function in parallel. Preferred over `spawn()`.' },
+            { label: 'task.defer', insertText: 'task.defer(${1:function}${2:, ${3:arguments}})', documentation: 'Defers the execution of a function until the next `task.wait()` or the next simulation step.' },
+            { label: 'task.delay', insertText: 'task.delay(${1:delayTime}, ${2:function}${3:, ${4:arguments}})', documentation: 'Executes a function after a specified delay without yielding the current thread.' },
+            { label: 'Vector3.zero', documentation: 'A Vector3 with all components set to zero (0, 0, 0).' },
+            { label: 'Vector3.one', documentation: 'A Vector3 with all components set to one (1, 1, 1).' },
+            { label: 'Vector3.xAxis', documentation: 'A unit Vector3 along the X-axis (1, 0, 0).' },
+            { label: 'Vector3.yAxis', documentation: 'A unit Vector3 along the Y-axis (0, 1, 0).' },
+            { label: 'Vector3.zAxis', documentation: 'A unit Vector3 along the Z-axis (0, 0, 1).' },
+            { label: 'CFrame.identity', documentation: 'The identity CFrame, representing no position or rotation offset.' },
+            { label: 'CFrame.new', insertText: 'CFrame.new(${1:x}, ${2:y}, ${3:z})', documentation: 'Creates a CFrame. Can take position arguments or position and lookAt arguments.' },
+            { label: 'CFrame.lookAt', insertText: 'CFrame.lookAt(${1:at}, ${2:lookAt})', documentation: 'Creates a CFrame looking from `at` towards `lookAt`.' },
+            { label: 'CFrame.fromMatrix', insertText: 'CFrame.fromMatrix(${1:position}, ${2:r00}, ${3:r01}, ${4:r02}, ${5:r10}, ${6:r11}, ${7:r12}, ${8:r20}, ${9:r21}, ${10:r22})', documentation: 'Creates a CFrame from a position and three axis vectors.' },
+            { label: 'CFrame.Angles', insertText: 'CFrame.Angles(${1:rx}, ${2:ry}, ${3:rz})', documentation: 'Creates a CFrame from Euler angles (in radians).' },
+            { label: 'Color3.new', insertText: 'Color3.new(${1:r}, ${2:g}, ${3:b})', documentation: 'Creates a Color3 from RGB values (0-1).' },
+            { label: 'Color3.fromRGB', insertText: 'Color3.fromRGB(${1:r}, ${2:g}, ${3:b})', documentation: 'Creates a Color3 from RGB values (0-255).' },
+            { label: 'Color3.fromHSV', insertText: 'Color3.fromHSV(${1:h}, ${2:s}, ${3:v})', documentation: 'Creates a Color3 from HSV values.' },
+            { label: 'Color3.fromHex', insertText: 'Color3.fromHex("${1:#RRGGBB}")', documentation: 'Creates a Color3 from a hexadecimal color string.' },
+            { label: 'UDim2.new', insertText: 'UDim2.new(${1:xScale}, ${2:xOffset}, ${3:yScale}, ${4:yOffset})', documentation: 'Creates a UDim2 from scale and offset values for X and Y.' },
+            { label: 'UDim.new', insertText: 'UDim.new(${1:scale}, ${2:offset})', documentation: 'Creates a UDim from a scale and an offset value.' },
+            { label: 'Vector2.new', insertText: 'Vector2.new(${1:x}, ${2:y})', documentation: 'Creates a Vector2 from X and Y components.' },
+            { label: 'Ray.new', insertText: 'Ray.new(${1:origin}, ${2:direction})', documentation: 'Creates a Ray from an origin and a direction.' },
+            { label: 'TweenInfo.new', insertText: 'TweenInfo.new(${1:time}${2:, ${3:easingStyle}}${4:, ${5:direction}}${6:, ${7:repeatCount}}${8:, ${9:reverses}}${10:, ${11:delayTime}})', documentation: 'Creates a TweenInfo object to configure tween animations.' },
+            { label: 'Axes.X', documentation: 'Represents the X-axis.' },
+            { label: 'Axes.Y', documentation: 'Represents the Y-axis.' },
+            { label: 'Axes.Z', documentation: 'Represents the Z-axis.' },
+            { label: 'Faces.Right', documentation: 'Represents the right face of a part.' },
+            { label: 'Faces.Left', documentation: 'Represents the left face of a part.' },
+            { label: 'Faces.Top', documentation: 'Represents the top face of a part.' },
+            { label: 'Faces.Bottom', documentation: 'Represents the bottom face of a part.' },
+            { label: 'Faces.Front', documentation: 'Represents the front face of a part.' },
+            { label: 'Faces.Back', documentation: 'Represents the back face of a part.' },
+            { label: 'Skybox', documentation: 'A property of Lighting that determines the skybox texture.' }
+          ];
+          robloxGlobals.forEach(g => {
+            // Prevent suggesting `global global` for top-level globals
+            if (lastWord === g.label.split('.')[0] && g.label.split('.').length === 1) {
+                return;
+            }
+            suggestions.push({
+              label: g.label,
+              kind: monaco.languages.CompletionItemKind.Variable, // or Class for types
+              insertText: g.insertText || g.label, // Use insertText if provided, else label
+              insertTextRules: g.insertText && g.insertText.includes('${') ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined, // Apply snippet rules only if it's actually a snippet
+              documentation: g.documentation,
+              range: range
+            });
+          });
+
+          // --- Roblox Services (often accessed via `game:GetService()`) ---
+          const robloxServices = [
+            { label: 'Players', documentation: 'Manages players in the game, including adding/removing players and retrieving player objects.' },
+            { label: 'Lighting', documentation: 'Controls environmental lighting properties like ambient light, shadows, and sky.' },
+            { label: 'ReplicatedStorage', documentation: 'Storage for assets that need to be replicated to both client and server.' },
+            { label: 'ServerScriptService', documentation: 'Contains server-side scripts that run only on the server.' },
+            { label: 'ServerStorage', documentation: 'Storage for assets accessible only on the server.' },
+            { label: 'StarterGui', documentation: 'Contains ScreenGuis, SurfaceGuis, and BillboardGuis that are copied to players` PlayerGui when they join.' },
+            { label: 'StarterPack', documentation: 'Contains Tools that are copied to players` Backpack when they join.' },
+            { label: 'StarterPlayer', documentation: 'Contains default settings and scripts for players, including StarterPlayerScripts and StarterCharacterScripts.' },
+            { label: 'StarterPlayerScripts', documentation: 'A folder inside StarterPlayer for LocalScripts that run when a player spawns.' },
+            { label: 'StarterCharacterScripts', documentation: 'A folder inside StarterPlayer for LocalScripts that run when a player\'s character spawns.' },
+            { label: 'Teams', documentation: 'Manages teams in the game, allowing players to be assigned to different teams.' },
+            { label: 'UserInputService', documentation: 'Manages all user input events (keyboard, mouse, gamepad, touch, etc.).' },
+            { label: 'RunService', documentation: 'Provides events that fire every frame, useful for updating game logic or rendering.' },
+            { label: 'TweenService', documentation: 'Allows creating smooth, interpolated animations for object properties.' },
+            { label: 'CollectionService', documentation: 'Manages tags on instances, allowing arbitrary grouping of objects.' },
+            { label: 'ContentProvider', documentation: 'Manages loading of game assets.' },
+            { label: 'DataStoreService', documentation: 'Provides methods for saving and loading persistent data for games.' },
+            { label: 'Debris', documentation: 'Manages objects that should be destroyed after a certain amount of time.' },
+            { label: 'HttpService', documentation: 'Allows scripts to make HTTP requests to external web servers.' },
+            { label: 'LocalizationService', documentation: 'Manages localization for text and assets in the game.' },
+            { label: 'MarketplaceService', documentation: 'Provides methods for interacting with the Roblox marketplace (e.g., buying game passes, products).' },
+            { label: 'PathfindingService', documentation: 'Calculates paths for NPCs to navigate the game world.' },
+            { label: 'PhysicsService', documentation: 'Manages collision groups and physical interactions between parts.' },
+            { label: 'ProximityPromptService', documentation: 'Manages ProximityPrompt objects, which show an interactive prompt when a player is near.' },
+            { label: 'ReplicatedFirst', documentation: 'Content here is replicated to clients before ReplicatedStorage, ideal for loading screens.' },
+            { label: 'ScreenshotCaptureService', documentation: 'Provides functionality to capture screenshots.' },
+            { label: 'Selection', documentation: 'Manages the currently selected objects in Studio (client-side).' },
+            { label: 'SoundService', documentation: 'Manages all audio playback in the game.' },
+            { label: 'TeleportService', documentation: 'Handles teleporting players between different game places.' },
+            { label: 'TestService', documentation: 'Provides utilities for automating tests in Studio.' },
+            { label: 'TextChatService', documentation: 'Manages in-game text chat.' },
+            { label: 'TextFilterService', documentation: 'Filters text for inappropriate content.' },
+            { label: 'ThrottlingService', documentation: 'Manages limits on certain operations to prevent abuse.' },
+            { label: 'TimerService', documentation: 'Provides a way to create timers for delayed or repeating actions.' },
+            { label: 'Workspace', documentation: 'Alias for the `workspace` global. The main container for game objects.' },
+            { label: 'BadgeService', documentation: 'Manages Roblox badges.' },
+            { label: 'GamePassService', documentation: 'Manages Roblox game passes.' },
+            { label: 'GroupService', documentation: 'Provides functions for interacting with Roblox groups.' },
+            { label: 'InsertService', documentation: 'Allows loading models from the Roblox website into the game.' },
+            { label: 'LogService', documentation: 'Provides access to the game server logs.' },
+            { label: 'MemoryStoreService', documentation: 'Provides fast, temporary key-value storage across servers.' },
+            { label: 'NetworkServer', documentation: 'Manages the server-side networking (internal).' },
+            { label: 'NetworkClient', documentation: 'Manages the client-side networking (internal).' },
+            { label: 'PluginGuiService', documentation: 'Manages GUIs created by plugins in Studio.' },
+            { label: 'StudioService', documentation: 'Provides methods specific to Roblox Studio.' },
+            { label: 'TaskScheduler', documentation: 'Manages when different tasks run within the engine.' },
+            { label: 'ThirdPartyService', documentation: 'Manages integration with third-party services.' },
+            { label: 'ChangeHistoryService', documentation: 'Manages undo/redo history in Studio.' },
+            { label: 'CoreGui', documentation: 'Contains Roblox-managed UI elements (e.g., chat, player list).' },
+            { label: 'GuiService', documentation: 'Manages core Roblox UI functionality.' },
+            { label: 'ContextActionService', documentation: 'Binds user input to specific actions, allowing for flexible control schemes.' },
+            { label: 'Chat', documentation: 'Provides an interface for the in-game chat system.' },
+            { label: 'ContentService', documentation: 'Manages content (assets) in the game.' },
+            { label: 'DebuggerUIService', documentation: 'Provides methods for interacting with the Studio debugger UI.' },
+            { label: 'FriendService', documentation: 'Provides functions for interacting with Roblox friends.' },
+            { label: 'GamepadService', documentation: 'Manages input from gamepads.' },
+            { label: 'HapticService', documentation: 'Controls haptic feedback (vibrations) on supported devices.' },
+            { label: 'KeyframeSequenceProvider', documentation: 'Provides access to KeyframeSequence assets.' },
+            { label: 'MaterialService', documentation: 'Manages custom materials for parts.' },
+            { label: 'MessagingService', documentation: 'Enables cross-server communication.' },
+            { label: 'NotificationService', documentation: 'Sends in-game notifications to players.' },
+            { label: 'PackageService', documentation: 'Manages PackageLink instances.' },
+            { label: 'PerformanceMonitor', documentation: 'Provides tools for monitoring game performance.' },
+            { label: 'PlayerEmulatorService', documentation: 'Manages player emulation in Studio.' },
+            { label: 'PluginDebuggingService', documentation: 'Provides methods for debugging plugins.' },
+            { label: 'PluginManager', documentation: 'Manages installed plugins in Studio.' },
+            { label: 'PostEffectsService', documentation: 'Manages post-processing effects.' },
+            { label: 'RenderSettings', documentation: 'Provides control over rendering quality settings.' },
+            { label: 'ScriptContext', documentation: 'Manages script execution and security contexts.' },
+            { label: 'UserGameSettings', documentation: 'Provides access to user-specific game settings (e.g., graphics quality).' },
+            { label: 'UserInterfaceService', documentation: 'Manages various aspects of the user interface.' },
+            { label: 'VRService', documentation: 'Provides an interface for virtual reality devices.' },
+            { label: 'VoiceChatService', documentation: 'Manages in-game voice chat.' },
+            { label: 'WaitingScriptsService', documentation: 'Tracks scripts that are waiting for certain conditions.' },
+            { label: 'WebProxyService', documentation: 'Manages web proxy settings.' },
+            { label: 'AnalyticsService', documentation: 'Provides tools for tracking game analytics.' },
+            { label: 'AssetService', documentation: 'Provides functions for working with Roblox assets.' },
+            { label: 'AvatarEditorService', documentation: 'Manages avatar customization features.' },
+            { label: 'ChatService', documentation: 'Provides an interface for the in-game chat system (newer API).' },
+            { label: 'Corescripts', documentation: 'Internal service for Roblox core scripts.' },
+            { label: 'EmotesService', documentation: 'Manages player emotes.' },
+            { label: 'TeamService', documentation: 'Manages teams in the game.' },
+            { label: 'VirtualTexturingService', documentation: 'Manages virtual texturing in the engine.' },
+            { label: 'Translator', documentation: 'Provides API for translating string keys into localized strings.' }
+          ];
+          robloxServices.forEach(service => {
+            // Prevent suggesting `Service Service`
+            if (lastWord === service.label) {
+                return;
+            }
+            suggestions.push({
+              label: service.label,
+              kind: monaco.languages.CompletionItemKind.Class, // Services are like classes
+              insertText: service.label,
+              documentation: service.documentation,
+              range: range
+            });
+          });
+
+          // --- Luau Types (for type annotations) ---
+          const luauTypes = [
+            { label: 'any', documentation: 'Represents any type. Use sparingly as it bypasses type checking.' },
+            { label: 'number', documentation: 'Represents a double-precision floating-point number.' },
+            { label: 'string', documentation: 'Represents a sequence of characters.' },
+            { label: 'boolean', documentation: 'Represents a true or false value.' },
+            { label: 'table', documentation: 'Represents a Lua table, a collection of key-value pairs.' },
+            { label: 'function', documentation: 'Represents a callable function.' },
+            { label: 'thread', documentation: 'Represents a Lua coroutine.' },
+            { label: 'userdata', documentation: 'Represents arbitrary C data in Lua.' },
+            { label: 'nil', documentation: 'Represents the absence of a value.' },
+            { label: 'void', documentation: 'Indicates a function that returns no values (Luau specific).' },
+            { label: 'unknown', documentation: 'Represents a value whose type is not known. Must be narrowed before use (Luau specific).' },
+            { label: 'never', documentation: 'Represents a value that can never occur (Luau specific).' },
+            { label: 'true', documentation: 'Boolean literal for truth.' },
+            { label: 'false', documentation: 'Boolean literal for falsity.' },
+            { label: 'type', documentation: 'Used for type aliases (Luau specific).' },
+            { label: 'typeof', documentation: 'Infers the type of an expression (Luau specific).' },
+            { label: 'keyof', documentation: 'Extracts the literal union type of keys from a table type (Luau specific).' },
+            { label: 'readonly', documentation: 'Marks a table as read-only (Luau specific).' },
+            { label: '...', documentation: 'Used for variadic arguments in function types or declarations.' },
+            { label: 'array<T>', documentation: 'Type annotation for an array where all elements are of type T (Luau specific).' },
+            { label: 'enum', documentation: 'Declares an enumeration (Luau specific).' },
+            { label: 'union', documentation: 'Combines multiple types, allowing a value to be any of them (Luau specific).' },
+            { label: 'intersection', documentation: 'Combines multiple types, requiring a value to be all of them (Luau specific).' },
+            { label: 'tuple', documentation: 'Defines a fixed-size sequence of types (Luau specific).' },
+            { label: 'class', documentation: 'Used for defining class types (Luau specific).' },
+            { label: 'self', documentation: 'Inferred type of the `self` parameter in method calls (Luau specific).' }
+          ];
+          luauTypes.forEach(type => {
+            if (lastWord === type.label) { // Prevent `type type`
+                return;
+            }
+            suggestions.push({
+              label: type.label,
+              kind: monaco.languages.CompletionItemKind.TypeParameter,
+              insertText: type.label,
+              documentation: type.documentation,
+              range: range
+            });
+          });
+
+
+          // --- Common Roblox Enums and their members ---
+          // This structure allows for suggesting Enum categories first (e.g., `Enum.KeyCode`),
+          // and then their members (e.g., `Enum.KeyCode.LeftShift`).
+          const commonEnums = {
+            'KeyCode': {
+                documentation: 'Represents a specific key on a keyboard or gamepad.',
+                members: [
+                    { label: 'Unknown', documentation: 'An unknown key code.' }, { label: 'Backspace', documentation: 'The backspace key.' }, { label: 'Tab', documentation: 'The tab key.' },
+                    { label: 'Clear', documentation: 'The clear key.' }, { label: 'Return', documentation: 'The return (Enter) key.' }, { label: 'Pause', documentation: 'The pause key.' },
+                    { label: 'Escape', documentation: 'The escape key.' }, { label: 'Space', documentation: 'The spacebar.' }, { label: 'PageUp', documentation: 'The page up key.' },
+                    { label: 'PageDown', documentation: 'The page down key.' }, { label: 'End', documentation: 'The end key.' }, { label: 'Home', documentation: 'The home key.' },
+                    { label: 'Left', documentation: 'The left arrow key.' }, { label: 'Up', documentation: 'The up arrow key.' }, { label: 'Right', documentation: 'The right arrow key.' },
+                    { label: 'Down', documentation: 'The down arrow key.' }, { label: 'Select', documentation: 'The select key.' }, { label: 'Print', documentation: 'The print screen key.' },
+                    { label: 'Execute', documentation: 'The execute key.' }, { label: 'Snapshot', documentation: 'The snapshot key.' }, { label: 'Insert', documentation: 'The insert key.' },
+                    { label: 'Delete', documentation: 'The delete key.' }, { label: 'Help', documentation: 'The help key.' }, { label: 'D0', documentation: 'The 0 key.' },
+                    { label: 'D1', documentation: 'The 1 key.' }, { label: 'D2', documentation: 'The 2 key.' }, { label: 'D3', documentation: 'The 3 key.' },
+                    { label: 'D4', documentation: 'The 4 key.' }, { label: 'D5', documentation: 'The 5 key.' }, { label: 'D6', documentation: 'The 6 key.' },
+                    { label: 'D7', documentation: 'The 7 key.' }, { label: 'D8', documentation: 'The 8 key.' }, { label: 'D9', documentation: 'The 9 key.' },
+                    { label: 'A', documentation: 'The A key.' }, { label: 'B', documentation: 'The B key.' }, { label: 'C', documentation: 'The C key.' },
+                    { label: 'Z', documentation: 'The Z key.' }, // ... and so on for all letters
+                    { label: 'LeftWindows', documentation: 'The left Windows key.' }, { label: 'RightWindows', documentation: 'The right Windows key.' },
+                    { label: 'Application', documentation: 'The application key.' }, { label: 'Sleep', documentation: 'The sleep key.' },
+                    { label: 'NumPad0', documentation: 'The numpad 0 key.' }, { label: 'NumPad9', documentation: 'The numpad 9 key.' }, // ... and so on for numpad
+                    { label: 'Multiply', documentation: 'The multiply key.' }, { label: 'Add', documentation: 'The add key.' },
+                    { label: 'Separator', documentation: 'The separator key.' }, { label: 'Subtract', documentation: 'The subtract key.' },
+                    { label: 'Decimal', documentation: 'The decimal key.' }, { label: 'Divide', documentation: 'The divide key.' },
+                    { label: 'F1', documentation: 'The F1 function key.' }, { label: 'F24', documentation: 'The F24 function key.' }, // ... and so on for F keys
+                    { label: 'NumLock', documentation: 'The num lock key.' }, { label: 'Scroll', documentation: 'The scroll lock key.' },
+                    { label: 'LeftShift', documentation: 'The left Shift key.' }, { label: 'RightShift', documentation: 'The right Shift key.' },
+                    { label: 'LeftControl', documentation: 'The left Control key.' }, { label: 'RightControl', documentation: 'The right Control key.' },
+                    { label: 'LeftAlt', documentation: 'The left Alt key.' }, { label: 'RightAlt', documentation: 'The right Alt key.' },
+                    { label: 'BrowserBack', documentation: 'The browser back key.' }, { label: 'BrowserForward', documentation: 'The browser forward key.' },
+                    { label: 'BrowserRefresh', documentation: 'The browser refresh key.' }, { label: 'BrowserStop', documentation: 'The browser stop key.' },
+                    { label: 'BrowserSearch', documentation: 'The browser search key.' }, { label: 'BrowserFavorites', documentation: 'The browser favorites key.' },
+                    { label: 'BrowserHome', documentation: 'The browser home key.' }, { label: 'VolumeMute', documentation: 'The volume mute key.' },
+                    { label: 'VolumeDown', documentation: 'The volume down key.' }, { label: 'VolumeUp', documentation: 'The volume up key.' },
+                    { label: 'MediaNextTrack', documentation: 'The media next track key.' }, { label: 'MediaPreviousTrack', documentation: 'The media previous track key.' },
+                    { label: 'MediaStop', documentation: 'The media stop key.' }, { label: 'MediaPlayPause', documentation: 'The media play/pause key.' },
+                    { label: 'LaunchMail', documentation: 'The launch mail key.' }, { label: 'LaunchMediaSelect', documentation: 'The launch media select key.' },
+                    { label: 'LaunchApp1', documentation: 'The launch application 1 key.' }, { label: 'LaunchApp2', documentation: 'The launch application 2 key.' },
+                    { label: 'Oem1', documentation: 'OEM specific key (for ;:).' }, { label: 'OemPlus', documentation: 'OEM specific key (for =+).' },
+                    { label: 'OemComma', documentation: 'OEM specific key (for ,<).' }, { label: 'OemMinus', documentation: 'OEM specific key (for -_).' },
+                    { label: 'OemPeriod', documentation: 'OEM specific key (for .>).' }, { label: 'Oem2', documentation: 'OEM specific key (for /?).' },
+                    { label: 'Oem3', documentation: 'OEM specific key (for `~).' }, { label: 'Oem4', documentation: 'OEM specific key (for [{).' },
+                    { label: 'Oem5', documentation: 'OEM specific key (for \\|).' }, { label: 'Oem6', documentation: 'OEM specific key (for ]}).' },
+                    { label: 'Oem7', documentation: 'OEM specific key (for \'").' }, { label: 'Oem8', documentation: 'OEM specific key.' },
+                    { label: 'Oem102', documentation: 'OEM specific key (for \\| on non-US keyboards).' }, { label: 'Menu', documentation: 'The menu key.' },
+                    { label: 'Power', documentation: 'The power key.' }, { label: 'OemSemicolon', documentation: 'The OEM semicolon key.' },
+                    { label: 'Oemtilde', documentation: 'The OEM tilde key.' }, { label: 'OemOpenBrackets', documentation: 'The OEM open brackets key.' },
+                    { label: 'OemPipe', documentation: 'The OEM pipe key.' }, { label: 'OemCloseBrackets', documentation: 'The OEM close brackets key.' },
+                    { label: 'OemQuotes', documentation: 'The OEM quotes key.' },
+                    { label: 'RightButton', documentation: 'Right mouse button.' }, { label: 'LeftButton', documentation: 'Left mouse button.' }, { label: 'MiddleButton', documentation: 'Middle mouse button.' },
+                    { label: 'XButton1', documentation: 'First extra mouse button.' }, { label: 'XButton2', documentation: 'Second extra mouse button.' },
+                    { label: 'ButtonA', documentation: 'Gamepad A button.' }, { label: 'ButtonB', documentation: 'Gamepad B button.' },
+                    { label: 'ButtonX', documentation: 'Gamepad X button.' }, { label: 'ButtonY', documentation: 'Gamepad Y button.' },
+                    { label: 'ButtonR1', documentation: 'Gamepad R1 button.' }, { label: 'ButtonR2', documentation: 'Gamepad R2 button.' },
+                    { label: 'ButtonL1', documentation: 'Gamepad L1 button.' }, { label: 'ButtonL2', documentation: 'Gamepad L2 button.' },
+                    { label: 'ButtonStart', documentation: 'Gamepad Start button.' }, { label: 'ButtonSelect', documentation: 'Gamepad Select button.' },
+                    { label: 'ButtonUp', documentation: 'Gamepad D-pad Up button.' }, { label: 'ButtonDown', documentation: 'Gamepad D-pad Down button.' },
+                    { label: 'ButtonLeft', documentation: 'Gamepad D-pad Left button.' }, { label: 'ButtonRight', documentation: 'Gamepad D-pad Right button.' }
+                ]
+            },
+            'UserInputType': {
+                documentation: 'Describes the type of input received from a user.',
+                members: [
+                    { label: 'MouseButton1', documentation: 'Left mouse button input.' },
+                    { label: 'MouseButton2', documentation: 'Right mouse button input.' },
+                    { label: 'MouseButton3', documentation: 'Middle mouse button input.' },
+                    { label: 'MouseWheel', documentation: 'Mouse wheel input.' },
+                    { label: 'Touch', documentation: 'Touch screen input.' },
+                    { label: 'Accelerometer', documentation: 'Accelerometer input from a device.' },
+                    { label: 'Gyroscope', documentation: 'Gyroscope input from a device.' },
+                    { label: 'TextInput', documentation: 'Text input from a keyboard.' },
+                    { label: 'Keyboard', documentation: 'Generic keyboard input.' },
+                    { label: 'Focus', documentation: 'Focus change input.' },
+                    { label: 'Occlusion', documentation: 'Occlusion event input.' },
+                    { label: 'None', documentation: 'No input type.' },
+                    { label: 'GamePad1', documentation: 'First gamepad input.' }, // ... and so on for gamepads
+                ]
+            },
+            'Material': {
+                documentation: 'Describes the visual and physical material of a BasePart.',
+                members: [
+                    { label: 'Plastic', documentation: 'Standard plastic material.' },
+                    { label: 'Wood', documentation: 'Wood material.' },
+                    { label: 'Slate', documentation: 'Slate material.' },
+                    { label: 'Concrete', documentation: 'Concrete material.' },
+                    { label: 'Metal', documentation: 'Metal material.' },
+                    { label: 'Brick', documentation: 'Brick material.' },
+                    { label: 'Grass', documentation: 'Grass material.' },
+                    { label: 'Sand', documentation: 'Sand material.' },
+                    { label: 'Foil', documentation: 'Foil material.' },
+                    { label: 'Ice', documentation: 'Ice material.' },
+                    { label: 'Granite', documentation: 'Granite material.' },
+                    { label: 'Marble', documentation: 'Marble material.' },
+                    { label: 'Pebble', documentation: 'Pebble material.' },
+                    { label: 'Cobblestone', documentation: 'Cobblestone material.' },
+                    { label: 'CorrodedMetal', documentation: 'Corroded metal material.' },
+                    { label: 'DiamondPlate', documentation: 'Diamond plate metal material.' },
+                    { label: 'Rust', documentation: 'Rusty metal material.' },
+                    { label: 'Glass', documentation: 'Glass material.' },
+                    { label: 'ForceField', documentation: 'Force field material (transparent, non-colliding).' },
+                    { label: 'Fabric', documentation: 'Fabric material.' },
+                    { label: 'SmoothPlastic', documentation: 'Smoother plastic material.' },
+                    { label: 'WoodPlanks', documentation: 'Wood planks material.' },
+                    { label: 'Basalt', documentation: 'Basalt rock material.' },
+                    { label: 'CrackedLava', documentation: 'Cracked lava material.' },
+                    { label: 'LeafyGrass', documentation: 'Grass with more pronounced leaves.' },
+                    { label: 'SealedWood', documentation: 'Sealed wood material.' },
+                    { label: 'Snow', documentation: 'Snow material.' },
+                    { label: 'Water', documentation: 'Water material.' },
+                    { label: 'Rock', documentation: 'Rock material.' },
+                    { label: 'Flesh', documentation: 'Flesh material.' },
+                    { label: 'Ground', documentation: 'Generic ground material.' },
+                    { label: 'Composite', documentation: 'Composite material.' },
+                    { label: 'Asphalt', documentation: 'Asphalt road material.' },
+                    { label: 'Friction', documentation: 'Material with high friction.' },
+                    { label: 'Custom', documentation: 'Placeholder for custom materials.' }
+                ]
+            },
+            'PartType': {
+                documentation: 'Describes the basic shape of a BasePart.',
+                members: [
+                    { label: 'Ball', documentation: 'A spherical part.' },
+                    { label: 'Block', documentation: 'A rectangular prism part.' },
+                    { label: 'Cylinder', documentation: 'A cylindrical part.' }
+                ]
+            },
+            'RenderMode': {
+                documentation: 'Describes the current rendering mode of the game.',
+                members: [
+                    { label: 'InGame', documentation: 'The game is running in a live environment.' },
+                    { label: 'Studio', documentation: 'The game is running within Roblox Studio.' }
+                ]
+            },
+            'HumanoidDisplayType': {
+                documentation: 'Controls how a Humanoid`s display name and name tag are rendered.',
+                members: [
+                    { label: 'DisplayName', documentation: 'Only shows the display name.' },
+                    { label: 'DisplayAndName', documentation: 'Shows both display name and username.' },
+                    { label: 'None', documentation: 'Shows neither display name nor username.' }
+                ]
+            },
+            'Font': {
+                documentation: 'Represents a font family used for TextLabels and TextButtons.',
+                members: [
+                    { label: 'Arial', documentation: 'The Arial font.' }, { label: 'SourceSansPro', documentation: 'The Source Sans Pro font.' },
+                    { label: 'HammersmithOne', documentation: 'The Hammersmith One font.' }, { label: 'Jura', documentation: 'The Jura font.' },
+                    { label: 'GothamBlack', documentation: 'The Gotham Black font.' }, { label: 'Arcade', documentation: 'The Arcade font.' },
+                    { label: 'Antique', documentation: 'The Antique font.' }, { label: 'SciFi', documentation: 'The Sci-Fi font.' },
+                    { label: 'Highway', documentation: 'The Highway font.' }, { label: 'Fantasy', documentation: 'The Fantasy font.' },
+                    { label: 'Ubuntu', documentation: 'The Ubuntu font.' }, { label: 'Roboto', documentation: 'The Roboto font.' },
+                    { label: 'Oswald', documentation: 'The Oswald font.' }, { label: 'IndieFlower', documentation: 'The Indie Flower font.' },
+                    { label: 'Creepster', documentation: 'The Creepster font.' }, { label: 'PermanentMarker', documentation: 'The Permanent Marker font.' },
+                    { label: 'LuckiestGuy', documentation: 'The Luckiest Guy font.' }, { label: 'Bangers', documentation: 'The Bangers font.' },
+                    { label: 'SpecialElite', documentation: 'The Special Elite font.' }, { label: 'Lobster', documentation: 'The Lobster font.' },
+                    { label: 'Pacifico', documentation: 'The Pacifico font.' }, { label: 'ShadowsIntoLight', documentation: 'The Shadows Into Light font.' },
+                    { label: 'Satisfy', documentation: 'The Satisfy font.' }, { label: 'DancingScript', documentation: 'The Dancing Script font.' },
+                    { label: 'Caveat', documentation: 'The Caveat font.' }, { label: 'Comfortaa', documentation: 'The Comfortaa font.' },
+                    { label: 'Righteous', documentation: 'The Righteous font.' }, { label: 'Exo2', documentation: 'The Exo 2 font.' },
+                    { label: 'OpenSans', documentation: 'The Open Sans font.' }, { label: 'Lato', documentation: 'The Lato font.' },
+                    { label: 'Montserrat', documentation: 'The Montserrat font.' }, { label: 'TitilliumWeb', documentation: 'The Titillium Web font.' },
+                    { label: 'WorkSans', documentation: 'The Work Sans font.' }
+                ]
+            },
+            'EasingStyle': {
+                documentation: 'Describes the interpolation curve used in tween animations.',
+                members: [
+                    { label: 'Linear', documentation: 'Constant speed.' },
+                    { label: 'Sine', documentation: 'Sine curve interpolation.' },
+                    { label: 'Back', documentation: 'Overshoots and then returns.' },
+                    { label: 'Quad', documentation: 'Quadratic interpolation.' },
+                    { label: 'Quart', documentation: 'Quartic interpolation.' },
+                    { label: 'Quint', documentation: 'Quintic interpolation.' },
+                    { label: 'Bounce', documentation: 'Bounces at the end of the animation.' },
+                    { label: 'Elastic', documentation: 'Elastic-like spring effect.' },
+                    { label: 'Cubic', documentation: 'Cubic interpolation.' }
+                ]
+            }
+          };
+
+          // Logic for suggesting Enum categories and their members
+          if (textUntilPosition.endsWith('Enum.')) {
+            // If the user typed "Enum.", suggest the top-level Enum categories
+            Object.keys(commonEnums).forEach(enumName => {
+              suggestions.push({
+                label: enumName,
+                kind: monaco.languages.CompletionItemKind.Enum,
+                insertText: enumName,
+                documentation: commonEnums[enumName].documentation,
+                range: range
+              });
+            });
+          } else {
+            // Otherwise, check if the user is typing an Enum member (e.g., "Enum.KeyCode.")
+            for (const enumName in commonEnums) {
+              if (textUntilPosition.endsWith(`Enum.${enumName}.`)) {
+                commonEnums[enumName].members.forEach(member => {
+                  suggestions.push({
+                    label: member.label,
+                    kind: monaco.languages.CompletionItemKind.EnumMember,
+                    insertText: member.label,
+                    documentation: member.documentation,
+                    range: range
+                  });
+                });
+                break; // Found a match, no need to check other enums
+              }
+            }
+          }
+
+          // --- Snippets and Code Patterns ---
+          const snippets = [
+            {
+              label: 'if_then_end',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'if ${1:condition} then\n\t${2:-- code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Standard If-Then-End conditional block.'
+            },
+            {
+              label: 'if_then_else_end',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'if ${1:condition} then\n\t${2:-- code}\nelse\n\t${3:-- else code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'If-Then-Else-End conditional block for alternative execution paths.'
+            },
+            {
+              label: 'for_i_in_pairs',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'for ${1:key}, ${2:value} in pairs(${3:table}) do\n\t${4:-- code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Iterate over all key-value pairs in a table using `pairs`.'
+            },
+            {
+              label: 'for_i_in_ipairs',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'for ${1:index}, ${2:value} in ipairs(${3:array}) do\n\t${4:-- code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Iterate over numeric indices of an array-like table using `ipairs`.'
+            },
+            {
+              label: 'function_declaration',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'function ${1:functionName}(${2:arguments})\n\t${3:-- code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Defines a global function.'
+            },
+            {
+              label: 'local_function_declaration',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'local function ${1:functionName}(${2:arguments})\n\t${3:-- code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Declares a local function, limiting its scope to the current block.'
+            },
+            {
+              label: 'Game:GetService',
+              kind: monaco.languages.CompletionItemKind.Method,
+              insertText: 'game:GetService("${1:ServiceName}")',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Retrieves a Roblox service instance. Recommended for accessing services.'
+            },
+            {
+              label: 'Instance.new',
+              kind: monaco.languages.CompletionItemKind.Constructor,
+              insertText: 'Instance.new("${1:className}")${2:, ${3:parent}}',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Creates a new Roblox Instance of a specified class name. Optionally takes a parent.'
+            },
+            {
+              label: 'Vector3.new',
+              kind: monaco.languages.CompletionItemKind.Constructor,
+              insertText: 'Vector3.new(${1:x}, ${2:y}, ${3:z})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Creates a new 3D vector from X, Y, and Z coordinates.'
+            },
+            {
+              label: 'CFrame.new',
+              kind: monaco.languages.CompletionItemKind.Constructor,
+              insertText: 'CFrame.new(${1:x}, ${2:y}, ${3:z})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Creates a new CFrame from X, Y, and Z position coordinates.'
+            },
+            {
+              label: 'while_do_end',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'while ${1:condition} do\n\t${2:-- code}\nend',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'A `while` loop that repeatedly executes code as long as a condition is true.'
+            },
+            {
+              label: 'repeat_until',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'repeat\n\t${1:-- code}\nuntil ${2:condition}',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'A `repeat` loop that executes code at least once and repeats until a condition is true.'
+            },
+            {
+              label: 'local_variable',
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: 'local ${1:variableName} = ${2:value}',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Declares a local variable with an optional initial value.'
+            },
+            {
+              label: 'coroutine.create',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'coroutine.create(${1:function})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Creates a new coroutine (lightweight thread) from a given function.'
+            },
+            {
+              label: 'coroutine.resume',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'coroutine.resume(${1:coroutine}, ${2:arguments})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Resumes the execution of a paused coroutine.'
+            },
+            {
+              label: 'coroutine.yield',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'coroutine.yield(${1:arguments})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Suspends the execution of the calling coroutine, returning arguments to `coroutine.resume`.'
+            },
+            {
+              label: 'tick',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'tick()',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Returns the current time in seconds since the epoch, on the local machine (client-side relevant).'
+            },
+            {
+              label: 'task.wait',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'task.wait(${1:seconds})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Yields the current thread and resumes after the given number of seconds. Preferred modern alternative to `wait()`.'
+            },
+            {
+              label: 'task.spawn',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'task.spawn(${1:function}, ${2:arguments})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Spawns a new thread to run a function in parallel. Preferred modern alternative to `spawn()`.'
+            },
+            {
+              label: 'task.defer',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'task.defer(${1:function}, ${2:arguments})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Defers the execution of a function until the next `task.wait()` or the next simulation step.'
+            },
+            {
+              label: 'task.delay',
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: 'task.delay(${1:delayTime}, ${2:function}, ${3:arguments})',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Executes a function after a specified delay without yielding the current thread.'
+            },
+            {
+              label: 'Event:Connect',
+              kind: monaco.languages.CompletionItemKind.Method,
+              insertText: '${1:event}:Connect(function(${2:arguments})\n\t${3:-- code}\nend)',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Connects a function to an RBXScriptSignal (event).'
+            },
+            {
+              label: 'Event:Once',
+              kind: monaco.languages.CompletionItemKind.Method,
+              insertText: '${1:event}:Once(function(${2:arguments})\n\t${3:-- code}\nend)',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Connects a function to an RBXScriptSignal that will only fire once.'
+            },
+            {
+              label: 'Event:Wait',
+              kind: monaco.languages.CompletionItemKind.Method,
+              insertText: '${1:event}:Wait()',
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              documentation: 'Yields the current thread until the event fires, then returns the arguments passed to the event.'
+            },
+            {
+                label: 'Enum.Font.new',
+                kind: monaco.languages.CompletionItemKind.Constructor,
+                insertText: 'Enum.Font.new("${1:FontName}")',
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: 'Creates a new Font Enum item from a string name.'
+            },
+            {
+                label: 'Vector2.new',
+                kind: monaco.languages.CompletionItemKind.Constructor,
+                insertText: 'Vector2.new(${1:x}, ${2:y})',
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: 'Creates a new 2D vector from X and Y components.'
+            },
+            {
+                label: 'Color3.fromHex',
+                kind: monaco.languages.CompletionItemKind.Function,
+                insertText: 'Color3.fromHex("${1:#RRGGBB}")',
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: 'Creates a Color3 from a hexadecimal color string (e.g., "#FF0000").'
+            },
+            {
+                label: 'loadstring(game:HttpGet(\'URL\'))()',
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertText: 'loadstring(game:HttpGet("${1:URL}"))()',
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: 'Snippet for loading and executing an external script via HTTP GET. Use with caution.'
+            },
+            {
+                label: 'loadstring(game:GetObjects())',
+                kind: monaco.languages.CompletionItemKind.Snippet,
+                insertText: 'loadstring(game:GetObjects("rbxassetid://${1:assetId}")[1].Source)()',
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                documentation: 'Loads and executes a script from a Roblox asset ID.'
+            }
+          ];
+
+          // Add snippets, with some contextual filtering
+          snippets.forEach(snippet => {
+            // Only suggest 'local_variable' if 'local' was just typed or line is empty.
+            if (snippet.label === 'local_variable' && !textUntilPosition.endsWith('local')) {
+                return;
+            }
+            // Only suggest function declaration snippets if 'function' was typed or line is empty
+            if ((snippet.label === 'function_declaration' || snippet.label === 'local_function_declaration') && !textUntilPosition.endsWith('function') && !textUntilPosition.endsWith('local function') && trimmedTextUntilPosition !== '') {
+                return;
+            }
+
+            suggestions.push({
+              label: snippet.label,
+              kind: snippet.kind,
+              insertText: snippet.insertText,
+              insertTextRules: snippet.insertTextRules,
+              documentation: snippet.documentation,
+              range: range
+            });
+          });
+
+          // Dynamic suggestions for user-defined local variables and functions
+          functions.forEach(f => {
+            if (lastWord !== f) { // Prevent `function function`
+                suggestions.push({
+                    label: f,
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: f + '()', // Add () for functions
+                    range: range
+                });
+            }
+          });
+
+          // Dynamic suggestions for user-defined local variables (no `()` needed)
+          variables.forEach(v => {
+            if (lastWord !== v) { // Prevent `variable variable`
+                suggestions.push({
+                    label: v,
+                    kind: monaco.languages.CompletionItemKind.Variable,
+                    insertText: v,
+                    range: range
+                });
+            }
+          });
+
+          return { suggestions: suggestions };
+        }
+      });
+
+      // ─── Editor Setup and Tab Management ──────────────────────────────────
+      const editorContainer = document.getElementById('editor-container');
+      const tabBar = document.getElementById('tab-bar');
+      const contextMenu = document.getElementById('context-menu');
+      let editor; // Global Monaco editor instance
+      let activeTabId = 0; // ID of the currently active tab
+      // Stores tab data: { id: { name: '...', model: MonacoTextModel, content: '...' } }
+      let tabs = {};
+      let currentContextMenuTab = null; // Stores the tab ID for the context menu
+
+      // Function to create or recreate the Monaco editor instance
+      function createEditorInstance(id, content, name) {
+        if (editor) {
+          editor.dispose(); // Dispose previous editor instance to prevent memory leaks
+        }
+        // Create a new Monaco model for the tab content
+        const model = monaco.editor.createModel(content, 'lua');
+        editor = monaco.editor.create(editorContainer, {
+          model: model,
+          language: 'lua',
+          theme: 'dark-black', // Apply the custom theme
+          automaticLayout: true, // Editor automatically resizes with its container
+          minimap: { enabled: true }, // Enable code minimap
+          fontSize: 14,
+          fontFamily: 'Fira Code, Cascadia Code, Consolas, "Courier New", monospace', // Preferred programming fonts
+          tabSize: 4, // 4 spaces for a tab
+          insertSpaces: true, // Use spaces instead of tabs
+          autoClosingBrackets: 'always', // Auto-close brackets
+          autoClosingQuotes: 'always', // Auto-close quotes
+          autoIndent: 'full', // Full auto-indentation
+          formatOnPaste: true, // Format code on paste
+          formatOnType: true, // Format code as you type
+          lineNumbers: 'on', // Display line numbers
+          wordWrap: 'on', // Wrap long lines
+          scrollBeyondLastLine: false, // Don't allow scrolling past the last line
+          folding: true, // Enable code folding
+          renderWhitespace: 'none', // Do not render whitespace characters
+          // Luau-specific editor options for suggestions
+          'editor.suggest.insertMode': 'replace', // Replace the word being typed with the suggestion
+          'editor.suggest.snippetSuggestions': 'top', // Prioritize snippet suggestions
+          // Token color customizations for more specific Luau syntax highlighting
+          'editor.tokenColorCustomizations': {
+              'textMateRules': [
+                  { scope: 'variable.other.luau', settings: { foreground: '#00C853' } },
+                  { scope: 'entity.name.function.luau', settings: { foreground: '#00C853' } },
+                  { scope: 'entity.name.type.luau', settings: { foreground: '#29B6F6' } },
+                  { scope: 'support.class.roblox', settings: { foreground: '#03DAC6' } },
+                  { scope: 'support.function.roblox', settings: { foreground: '#29B6F6' } },
+                  { scope: 'keyword.control.luau', settings: { foreground: '#BB86FC' } },
+                  { scope: 'constant.language.luau', settings: { foreground: '#03DAC6' } }
+                  ]
+          }
+        });
+        // Store the model and content with the tab
+        tabs[id] = { name, model, content };
+        editor.setModel(model); // Set the editor's model
+        updateMarkers(); // Run initial syntax check
+
+        // Listen for content changes in the active model to update syntax markers and stored content
+        editor.getModel().onDidChangeContent(() => {
+          updateMarkers();
+          if (tabs[activeTabId]) {
+              tabs[activeTabId].content = editor.getValue();
+          }
+        });
+      }
+
+      // Function to add a new tab to the tab bar
+      function addTab(name, content = `-- New Script ${Object.keys(tabs).length + 1}`) {
+        const newTabId = Date.now(); // Unique ID for the new tab
+        const tabElement = document.createElement('div');
+        tabElement.classList.add('tab');
+        tabElement.dataset.tabId = newTabId;
+        tabElement.textContent = name;
+        tabElement.setAttribute('tabindex', '0'); // Make tab focusable for accessibility
+
+        // Create and append the close button for the tab
+        const closeBtn = document.createElement('span');
+        closeBtn.classList.add('close-tab');
+        closeBtn.textContent = 'x';
+        closeBtn.onclick = (e) => {
+            e.stopPropagation(); // Prevent tab activation when clicking close button
+            closeTab(newTabId);
+        };
+        tabElement.appendChild(closeBtn);
+
+        // Insert the new tab before the "New Tab" button
+        tabBar.insertBefore(tabElement, tabBar.querySelector('.tab.new'));
+
+        // Initialize a Monaco model for the new tab with its content
+        const model = monaco.editor.createModel(content, 'lua');
+        tabs[newTabId] = { name, model, content }; // Store content with the tab
+
+        activateTab(newTabId); // Activate the newly created tab
+
+        // Add event listeners for renaming and context menu
+        tabElement.addEventListener('dblclick', () => renameTab(newTabId));
+        tabElement.addEventListener('contextmenu', (e) => openContextMenu(e, newTabId));
+        tabElement.addEventListener('click', () => activateTab(newTabId));
+      }
+
+      // Function to activate a specific tab
+      function activateTab(id) {
+        if (activeTabId === id) return; // Do nothing if already active
+
+        // Save content of the previously active tab before switching
+        if (activeTabId !== 0 && tabs[activeTabId] && editor && editor.getModel()) {
+            tabs[activeTabId].content = editor.getValue();
+        }
+
+        // Deactivate the old tab's visual state
+        const currentActiveTabElement = document.querySelector(`.tab[data-tab-id="${activeTabId}"]`);
+        if (currentActiveTabElement) {
+          currentActiveTabElement.classList.remove('active');
+        }
+
+        // Activate the new tab's visual state
+        const newActiveTabElement = document.querySelector(`.tab[data-tab-id="${id}"]`);
+        if (newActiveTabElement) {
+          newActiveTabElement.classList.add('active');
+          activeTabId = id;
+
+          // If the editor is not yet created or needs its model changed
+          if (!editor || editor.getModel() !== tabs[activeTabId].model) {
+              if (editor) {
+                  editor.dispose(); // Dispose previous editor to free resources
+              }
+              // Re-create the editor instance with the model of the new tab
+              editor = monaco.editor.create(editorContainer, {
+                  model: tabs[activeTabId].model,
+                  language: 'lua',
+                  theme: 'dark-black', // Apply the custom theme
+                  automaticLayout: true,
+                  minimap: { enabled: true },
+                  fontSize: 14,
+                  fontFamily: 'Fira Code, Cascadia Code, Consolas, "Courier New", monospace',
+                  tabSize: 4,
+                  insertSpaces: true,
+                  autoClosingBrackets: 'always',
+                  autoClosingQuotes: 'always',
+                  autoIndent: 'full',
+                  formatOnPaste: true,
+                  formatOnType: true,
+                  lineNumbers: 'on',
+                  wordWrap: 'on',
+                  scrollBeyondLastLine: false,
+                  folding: true,
+                  renderWhitespace: 'none',
+                  'editor.suggest.insertMode': 'replace',
+                  'editor.suggest.snippetSuggestions': 'top',
+                  'editor.tokenColorCustomizations': {
+                      'textMateRules': [
+                          { scope: 'variable.other.luau', settings: { foreground: '#00C853' } },
+                          { scope: 'entity.name.function.luau', settings: { foreground: '#00C853' } },
+                          { scope: 'entity.name.type.luau', settings: { foreground: '#29B6F6' } },
+                          { scope: 'support.class.roblox', settings: { foreground: '#03DAC6' } },
+                          { scope: 'support.function.roblox', settings: { foreground: '#29B6F6' } },
+                          { scope: 'keyword.control.luau', settings: { foreground: '#BB86FC' } },
+                          { scope: 'constant.language.luau', settings: { foreground: '#03DAC6' } }
+                      ]
+                  }
+              });
+              // Ensure the content of the model is up-to-date in case it was modified externally
+              editor.setValue(tabs[activeTabId].content);
+
+              // Re-attach content change listener for the new editor instance
+              editor.getModel().onDidChangeContent(() => {
+                updateMarkers();
+                if (tabs[activeTabId]) {
+                    tabs[activeTabId].content = editor.getValue();
+                }
+              });
+          } else {
+              // If the editor instance exists and is correct, just set its model
+              editor.setModel(tabs[activeTabId].model);
+          }
+
+          editor.focus(); // Focus the editor for immediate typing
+          updateMarkers(); // Re-run syntax check for the new active tab
+        }
+      }
+
+      // Function to close a tab
+      function closeTab(id) {
+          const tabElement = document.querySelector(`.tab[data-tab-id="${id}"]`);
+          if (tabElement) {
+              tabBar.removeChild(tabElement); // Remove tab from DOM
+              // Dispose the Monaco model to free up memory (important!)
+              if (tabs[id] && tabs[id].model) {
+                  tabs[id].model.dispose();
+              }
+              delete tabs[id]; // Remove tab data from our `tabs` object
+
+              // If the closed tab was the active one, activate another tab
+              if (activeTabId === id) {
+                  const remainingTabIds = Object.keys(tabs);
+                  if (remainingTabIds.length > 0) {
+                      activateTab(parseInt(remainingTabIds[0])); // Activate the first remaining tab
+                  } else {
+                      // If no tabs left, dispose editor and create a new default tab
+                      if (editor) {
+                          editor.dispose();
+                          editor = null;
+                      }
+                      activeTabId = 0;
+                      addNewTab();
+                  }
+              }
+          }
+      }
+
+      // Function to rename a tab
+      function renameTab(id) {
+          const tabElement = document.querySelector(`.tab[data-tab-id="${id}"]`);
+          if (tabElement) {
+              const currentName = tabs[id].name;
+              // Temporarily remove the close button for editing purposes
+              // Find all child nodes that are not text nodes
+              Array.from(tabElement.childNodes).forEach(node => {
+                  if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains('close-tab')) {
+                      tabElement.removeChild(node);
+                  }
+              });
+
+              tabElement.textContent = currentName; // Set text content for editing
+              tabElement.setAttribute('contenteditable', 'true'); // Make element editable
+              tabElement.focus(); // Focus the tab for editing
+
+              // Select all text for easy renaming
+              const range = document.createRange();
+              range.selectNodeContents(tabElement);
+              const selection = window.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+
+              // Function to finalize the renaming process
+              const finishRename = () => {
+                  tabElement.removeAttribute('contenteditable');
+                  const newName = tabElement.textContent.trim();
+                  if (newName === "") {
+                      tabElement.textContent = currentName; // Revert to old name if new name is empty
+                      tabs[id].name = currentName;
+                  } else {
+                      tabs[id].name = newName;
+                      tabElement.textContent = newName;
+                  }
+                  // Re-add the close button
+                  const readdCloseBtn = document.createElement('span');
+                  readdCloseBtn.classList.add('close-tab');
+                  readdCloseBtn.textContent = 'x';
+                  readdCloseBtn.onclick = (e) => {
+                      e.stopPropagation();
+                      closeTab(id);
+                  };
+                  tabElement.appendChild(readdCloseBtn);
+
+                  // Remove event listeners
+                  tabElement.removeEventListener('blur', finishRename);
+                  tabElement.removeEventListener('keydown', handleRenameKeydown);
+              };
+
+              // Handler for keyboard events during renaming (Enter to confirm, Escape to cancel)
+              const handleRenameKeydown = (e) => {
+                  if (e.key === 'Enter') {
+                      e.preventDefault(); // Prevent new line
+                      finishRename();
+                  } else if (e.key === 'Escape') {
+                      tabElement.removeAttribute('contenteditable');
+                      tabElement.textContent = currentName; // Revert text
+                      const readdCloseBtn = document.createElement('span');
+                      readdCloseBtn.classList.add('close-tab');
+                      readdCloseBtn.textContent = 'x';
+                      readdCloseBtn.onclick = (e) => {
+                          e.stopPropagation();
+                          closeTab(id);
+                      };
+                      tabElement.appendChild(readdCloseBtn);
+                      // Remove event listeners
+                      tabElement.removeEventListener('blur', finishRename);
+                      tabElement.removeEventListener('keydown', handleRenameKeydown);
+                  }
+              };
+
+              // Add event listeners for blur (lose focus) and keydown
+              tabElement.addEventListener('blur', finishRename);
+              tabElement.addEventListener('keydown', handleRenameKeydown);
+          }
+      }
+
+      // Helper function to add a new default tab
+      function addNewTab() {
+        addTab(`Script${Object.keys(tabs).length + 1}`);
+      }
+
+      // Function to display the custom context menu for tabs
+      function openContextMenu(e, tabId) {
+          e.preventDefault(); // Prevent default browser context menu
+          currentContextMenuTab = tabId; // Set the tab for which the context menu was opened
+          contextMenu.style.display = 'block'; // Show the menu
+          // Position the menu at the mouse click location
+          contextMenu.style.left = `${e.clientX}px`;
+          contextMenu.style.top = `${e.clientY}px`;
+      }
+
+      // Function to hide the context menu
+      function hideContextMenu() {
+          contextMenu.style.display = 'none';
+          currentContextMenuTab = null;
+      }
+
+      // Event listener to hide context menu when clicking outside it or a tab
+      document.addEventListener('click', (e) => {
+          if (!contextMenu.contains(e.target) && !e.target.classList.contains('tab')) {
+              hideContextMenu();
+          }
+      });
+
+      // Event listener for actions within the context menu
+      contextMenu.addEventListener('click', (e) => {
+          const action = e.target.dataset.action; // Get the action from the clicked menu item
+          if (currentContextMenuTab && action) {
+              if (action === 'rename') {
+                  renameTab(currentContextMenuTab);
+              } else if (action === 'delete') {
+                  closeTab(currentContextMenuTab);
+              }
+          }
+          hideContextMenu(); // Always hide menu after an action
+      });
+
+      // Add the "New Tab" button to the tab bar
+      const newTabButton = document.createElement('div');
+      newTabButton.classList.add('tab', 'new');
+      newTabButton.textContent = '+';
+      newTabButton.onclick = addNewTab; // Assign click handler
+      newTabButton.setAttribute('tabindex', '0'); // Make focusable
+      tabBar.appendChild(newTabButton);
+
+      // Initial tab creation when the editor loads
+      addNewTab();
+
+      // Function to apply syntax error markers from our `checkLuaSyntax` function
+      let markers = []; // To keep track of current markers
+      function updateMarkers() {
+        if (!editor || !editor.getModel()) return; // Ensure editor and model exist
+        const model = editor.getModel();
+        const code = model.getValue();
+        const detectedErrors = checkLuaSyntax(code); // Get errors from our checker
+
+        // Set the markers in Monaco Editor. 'owner' is a unique ID for our marker source.
+        monaco.editor.setModelMarkers(model, 'luau-syntax-checker', detectedErrors);
+      }
+    });
+  </script>
+</body>
+</html>
